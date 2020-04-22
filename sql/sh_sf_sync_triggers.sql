@@ -12,6 +12,18 @@ drop trigger if exists uidentities_insert_sf_sync_trigger;
 drop trigger if exists uidentities_update_sf_sync_trigger;
 drop trigger if exists uidentities_delete_sf_sync_trigger;
 
+drop trigger if exists profiles_insert_sf_sync_trigger;
+drop trigger if exists profiles_update_sf_sync_trigger;
+drop trigger if exists profiles_delete_sf_sync_trigger;
+
+drop trigger if exists identities_insert_sf_sync_trigger;
+drop trigger if exists identities_update_sf_sync_trigger;
+drop trigger if exists identities_delete_sf_sync_trigger;
+
+drop trigger if exists enrollments_insert_sf_sync_trigger;
+drop trigger if exists enrollments_update_sf_sync_trigger;
+drop trigger if exists enrollments_delete_sf_sync_trigger;
+
 delimiter $
 
 -- organizations
@@ -56,6 +68,50 @@ for each row begin
   insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
 end$
 create trigger uidentities_delete_sf_sync_trigger after delete on uidentities
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+end$
+
+-- profiles table
+create trigger profiles_insert_sf_sync_trigger after insert on profiles
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger profiles_update_sf_sync_trigger after update on profiles
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger profiles_delete_sf_sync_trigger after delete on profiles
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+end$
+
+-- identities table
+create trigger identities_insert_sf_sync_trigger after insert on identities
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger identities_update_sf_sync_trigger after update on identities
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger identities_delete_sf_sync_trigger after delete on identities
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+end$
+
+-- enrollments table
+create trigger enrollments_insert_sf_sync_trigger after insert on enrollments
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger enrollments_update_sf_sync_trigger after update on enrollments
+for each row begin
+  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+end$
+create trigger enrollments_delete_sf_sync_trigger after delete on enrollments
 for each row begin
   insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
 end$
