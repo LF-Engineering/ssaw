@@ -9,7 +9,6 @@ drop trigger if exists domains_organizations_delete_sf_sync_trigger;
 
 -- users/profiles
 drop trigger if exists uidentities_insert_sf_sync_trigger;
-drop trigger if exists uidentities_update_sf_sync_trigger;
 drop trigger if exists uidentities_delete_sf_sync_trigger;
 
 drop trigger if exists profiles_insert_sf_sync_trigger;
@@ -51,7 +50,7 @@ for each row begin
 end$
 create trigger domains_organizations_update_sf_sync_trigger after update on domains_organizations
 for each row begin
-  if old.domain != new.domain or NOT(old.is_top_domain <=> new.is_top_domain) or old.organization_id != new.organization_id then
+  if old.domain != new.domain or not(old.is_top_domain <=> new.is_top_domain) or old.organization_id != new.organization_id then
     insert into orgs_for_sf_sync(name) (select name from organizations where id = old.organization_id) on duplicate key update last_modified = now();
     insert into orgs_for_sf_sync(name) (select name from organizations where id = new.organization_id) on duplicate key update last_modified = now();
   end if;
@@ -67,10 +66,6 @@ create trigger uidentities_insert_sf_sync_trigger after insert on uidentities
 for each row begin
   insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
 end$
-create trigger uidentities_update_sf_sync_trigger after update on uidentities
-for each row begin
-  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
-end$
 create trigger uidentities_delete_sf_sync_trigger after delete on uidentities
 for each row begin
   insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
@@ -83,7 +78,9 @@ for each row begin
 end$
 create trigger profiles_update_sf_sync_trigger after update on profiles
 for each row begin
-  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  if not(old.name <=> new.name) or not(old.email <=> new.email) or not(old.gender <=> new.gender) or not(old.gender_acc <=> new.gender_acc) or not(old.is_bot <=> new.is_bot) or not(old.country_code <=> new.country_code) then 
+    insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  end if;
 end$
 create trigger profiles_delete_sf_sync_trigger after delete on profiles
 for each row begin
@@ -97,8 +94,10 @@ for each row begin
 end$
 create trigger identities_update_sf_sync_trigger after update on identities
 for each row begin
-  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
-  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  if old.source != new.source or not(old.name <=> new.name) or not(old.email <=> new.email) or not(old.username <=> new.username) or not(old.uuid <=> new.uuid) then
+    insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+    insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  end if;
 end$
 create trigger identities_delete_sf_sync_trigger after delete on identities
 for each row begin
@@ -112,8 +111,10 @@ for each row begin
 end$
 create trigger enrollments_update_sf_sync_trigger after update on enrollments
 for each row begin
-  insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
-  insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  if old.uuid != new.uuid or old.organization_id != new.organization_id or old.start != new.start or old.end != new.end then
+    insert into uuids_for_sf_sync(uuid) values(old.uuid) on duplicate key update last_modified = now();
+    insert into uuids_for_sf_sync(uuid) values(new.uuid) on duplicate key update last_modified = now();
+  end if;
 end$
 create trigger enrollments_delete_sf_sync_trigger after delete on enrollments
 for each row begin
