@@ -34,8 +34,10 @@ for each row begin
 end$
 create trigger organizations_update_sf_sync_trigger after update on organizations
 for each row begin
-  insert into orgs_for_sf_sync(name) values(old.name) on duplicate key update last_modified = now();
-  insert into orgs_for_sf_sync(name) values(new.name) on duplicate key update last_modified = now();
+  if old.name != new.name then
+    insert into orgs_for_sf_sync(name) values(old.name) on duplicate key update last_modified = now();
+    insert into orgs_for_sf_sync(name) values(new.name) on duplicate key update last_modified = now();
+  end if;
 end$
 create trigger organizations_delete_sf_sync_trigger after delete on organizations
 for each row begin
@@ -49,8 +51,10 @@ for each row begin
 end$
 create trigger domains_organizations_update_sf_sync_trigger after update on domains_organizations
 for each row begin
-  insert into orgs_for_sf_sync(name) (select name from organizations where id = old.organization_id) on duplicate key update last_modified = now();
-  insert into orgs_for_sf_sync(name) (select name from organizations where id = new.organization_id) on duplicate key update last_modified = now();
+  if old.domain != new.domain or NOT(old.is_top_domain <=> new.is_top_domain) or old.organization_id != new.organization_id then
+    insert into orgs_for_sf_sync(name) (select name from organizations where id = old.organization_id) on duplicate key update last_modified = now();
+    insert into orgs_for_sf_sync(name) (select name from organizations where id = new.organization_id) on duplicate key update last_modified = now();
+  end if;
 end$
 create trigger domains_organizations_delete_sf_sync_trigger after delete on domains_organizations
 for each row begin
