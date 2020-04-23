@@ -1,12 +1,14 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -58,6 +60,72 @@ func fatalf(pnic bool, f string, a ...interface{}) {
 	fatalOnError(fmt.Errorf(f, a...), pnic)
 }
 
+func queryOut(query string, args ...interface{}) {
+	mPrintf("%s\n", query)
+	if len(args) > 0 {
+		s := ""
+		for vi, vv := range args {
+			switch v := vv.(type) {
+			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, complex64, complex128, string, bool, time.Time:
+				s += fmt.Sprintf("%d:%+v ", vi+1, v)
+			case *int, *int8, *int16, *int32, *int64, *uint, *uint8, *uint16, *uint32, *uint64, *float32, *float64, *complex64, *complex128, *string, *bool, *time.Time:
+				s += fmt.Sprintf("%d:%+v ", vi+1, v)
+			case nil:
+				s += fmt.Sprintf("%d:(null) ", vi+1)
+			default:
+				s += fmt.Sprintf("%d:%+v ", vi+1, reflect.ValueOf(vv))
+			}
+		}
+		mPrintf("[%s]\n", s)
+	}
+}
+
+func queryDB(query string, args ...interface{}) (rows *sql.Rows, err error) {
+	rows, err = gDB.Query(query, args...)
+	if err != nil {
+		queryOut(query, args...)
+	}
+	return
+}
+
+func queryTX(tx *sql.Tx, query string, args ...interface{}) (rows *sql.Rows, err error) {
+	rows, err = tx.Query(query, args...)
+	if err != nil {
+		queryOut(query, args...)
+	}
+	return
+}
+
+func query(tx *sql.Tx, query string, args ...interface{}) (*sql.Rows, error) {
+	if tx == nil {
+		return queryDB(query, args...)
+	}
+	return queryTX(tx, query, args...)
+}
+
+func execDB(query string, args ...interface{}) (res sql.Result, err error) {
+	res, err = gDB.Exec(query, args...)
+	if err != nil {
+		queryOut(query, args...)
+	}
+	return
+}
+
+func execTX(tx *sql.Tx, query string, args ...interface{}) (res sql.Result, err error) {
+	res, err = tx.Exec(query, args...)
+	if err != nil {
+		queryOut(query, args...)
+	}
+	return
+}
+
+func exec(tx *sql.Tx, query string, args ...interface{}) (sql.Result, error) {
+	if tx == nil {
+		return execDB(query, args...)
+	}
+	return execTX(tx, query, args...)
+}
+
 func requestInfo(r *http.Request) string {
 	agent := ""
 	hdr := r.Header
@@ -76,6 +144,7 @@ func requestInfo(r *http.Request) string {
 }
 
 func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
+	gw = w
 	info := requestInfo(req)
 	mPrintf("Request: %s\n", info)
 	var err error
@@ -88,7 +157,57 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		mPrintf("unlock mutex\n")
 		gMtx.Unlock()
 	}()
-	gw = w
+	var (
+		modified        time.Time
+		modUUIDsAry     []time.Time
+		modCompaniesAry []time.Time
+		uuid            string
+		uuids           []string
+		company         string
+		companies       []string
+	)
+	rows, err := query(nil, "select last_modified, name from orgs_for_sf_sync")
+	if fatalOnError(err, false) {
+		return
+	}
+	for rows.Next() {
+		err = rows.Scan(&modified, &company)
+		if fatalOnError(err, false) {
+			return
+		}
+		modCompaniesAry = append(modCompaniesAry, modified)
+		companies = append(companies, company)
+	}
+	err = rows.Err()
+	if fatalOnError(err, false) {
+		return
+	}
+	err = rows.Close()
+	if fatalOnError(err, false) {
+		return
+	}
+	rows, err = query(nil, "select last_modified, uuid from uuids_for_sf_sync")
+	if fatalOnError(err, false) {
+		return
+	}
+	for rows.Next() {
+		err = rows.Scan(&modified, &uuid)
+		if fatalOnError(err, false) {
+			return
+		}
+		modUUIDsAry = append(modUUIDsAry, modified)
+		uuids = append(uuids, uuid)
+	}
+	err = rows.Err()
+	if fatalOnError(err, false) {
+		return
+	}
+	err = rows.Close()
+	if fatalOnError(err, false) {
+		return
+	}
+	mPrintf("%d companies to process: %+v\n", len(companies), companies)
+	mPrintf("%d UUIDs to process: %+v\n", len(uuids), uuids)
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "SYNC_OK")
 }
