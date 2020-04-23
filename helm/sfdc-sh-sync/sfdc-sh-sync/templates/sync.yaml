@@ -1,0 +1,82 @@
+{{- $skipSync := .Values.skipSync -}}
+{{ if not $skipSync }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: '{{ .Values.namespace }}'
+  name: '{{ .Values.syncServiceName }}'
+  labels:
+    name: sfdc-sh-sync
+spec:
+  ports:
+  - port: 7070
+    targetPort: 7070
+  selector:
+    name: sfdc-sh-sync
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: '{{ .Values.namespace }}'
+  name: '{{ .Values.syncPodName }}'
+  labels:
+    name: sfdc-sh-sync
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      name: sfdc-sh-sync
+  template:
+    metadata:
+      namespace: '{{ .Values.namespace }}'
+      labels:
+        name: sfdc-sh-sync
+    spec:
+      containers:
+      - command:
+        - {{ .Values.syncCommand }}
+        name: {{ .Values.syncPodName }}
+        image: {{ .Values.syncImage }}
+        imagePullPolicy: {{ .Values.imagePullPolicy }}
+        ports:
+        - containerPort: 7070
+        env:
+        - name: SH_DB_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: SH_DB_ENDPOINT.secret
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AWS_REGION.secret
+        - name: AWS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AWS_KEY.secret
+        - name: AWS_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AWS_SECRET.secret
+        - name: AWS_TOPIC
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AWS_TOPIC.secret
+        - name: LF_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: LF_AUTH.secret
+      restartPolicy: {{ .Values.syncRestartPolicy }}
+{{ end }}
