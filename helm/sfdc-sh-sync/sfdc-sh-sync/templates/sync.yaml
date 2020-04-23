@@ -10,8 +10,8 @@ metadata:
     name: sfdc-sh-sync
 spec:
   ports:
-  - port: 7070
-    targetPort: 7070
+  - port: 6060
+    targetPort: 6060
   selector:
     name: sfdc-sh-sync
   type: LoadBalancer
@@ -46,7 +46,7 @@ spec:
         image: {{ .Values.syncImage }}
         imagePullPolicy: {{ .Values.imagePullPolicy }}
         ports:
-        - containerPort: 7070
+        - containerPort: 6060
         env:
         - name: SH_DB_ENDPOINT
           valueFrom:
