@@ -1,0 +1,12 @@
+---
+name: Daily sync SH -> SFDC
+on:
+  schedule:
+  - cron:  '30 3 * * *'
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Sync from SH DB to SFDC
+      run: |
+        (curl -s "${{ secrets.SYNC_URL }}/sync-to-sfdc" |& tee output.txt | grep 'SYNC_OK') || ( cat output.txt; exit 1)

@@ -22,3 +22,8 @@ To deploy on Kubernetes
 - Eventually adjust Helm chart to your needs, including `setup.sh` and `delete.sh` shell scripts.
 - Run from repository root directory (test env): `` SYNC_URL="`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/SYNC_URL.test.secret`" ./sync-to-sfdc.sh ``.
 - Run from repository root directory (prod env): `` SYNC_URL="`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/SYNC_URL.prod.secret`" ./sync-to-sfdc.sh ``.
+
+# GitHub actions
+
+- Add your sync URL (for example AWS ELB of sfdc-sh-sync service stored in `helm/sfdc-sh-sync/sfdc-sh-sync/secrets/SYNC_URL.prod.secret`) in GitHub repository (Settings -> Secrets -> New secret: `SYNC_URL`).
+- Configre actions in `.github/workflows/`, for example: `.github/workflows/sync-to-sfdc.yaml`.
