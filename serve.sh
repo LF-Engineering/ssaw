@@ -8,6 +8,14 @@ if [ -z "${SH_DB_ENDPOINT}" ]
 then
   export SH_DB_ENDPOINT=`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/SH_DB_ENDPOINT.$1.secret`
 fi
+if [ -z "${ORG_SVC_URL}" ]
+then
+  export ORG_SVC_URL=`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/ORG_SVC_URL.$1.secret`
+fi
+if [ -z "${USER_SVC_URL}" ]
+then
+  export USER_SVC_URL=`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/USER_SVC_URL.$1.secret`
+fi
 if [ -z "${AWS_REGION}" ]
 then
   export AWS_REGION=`cat helm/sfdc-sh-sync/sfdc-sh-sync/secrets/AWS_REGION.$1.secret`

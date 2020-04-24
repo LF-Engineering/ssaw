@@ -9,12 +9,18 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	awsns "github.com/aws/aws-sdk-go/service/sns"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
@@ -58,6 +64,29 @@ func fatalOnError(err error, pnic bool) bool {
 
 func fatalf(pnic bool, f string, a ...interface{}) {
 	fatalOnError(fmt.Errorf(f, a...), pnic)
+}
+
+func getThreadsNum() int {
+	nCPUsStr := os.Getenv("N_CPUS")
+	nCPUs := 0
+	if nCPUsStr != "" {
+		var err error
+		nCPUs, err = strconv.Atoi(nCPUsStr)
+		if err != nil || nCPUs < 0 {
+			nCPUs = 0
+		}
+	}
+	if nCPUs > 0 {
+		n := runtime.NumCPU()
+		if nCPUs > n {
+			nCPUs = n
+		}
+		runtime.GOMAXPROCS(nCPUs)
+		return nCPUs
+	}
+	thrN := runtime.NumCPU()
+	runtime.GOMAXPROCS(thrN)
+	return thrN
 }
 
 func queryOut(query string, args ...interface{}) {
@@ -143,6 +172,80 @@ func requestInfo(r *http.Request) string {
 	return fmt.Sprintf("IP: %s, method: %s, path: %s", r.RemoteAddr, method, path)
 }
 
+func processOrg(ch chan [3]string, org string, updatedAt time.Time) (ret [3]string) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("org %s, updated at: %v error:\n%s\n", org, updatedAt, string(debug.Stack()))
+		}
+		if ch != nil {
+			ch <- ret
+		}
+	}()
+	/*
+	  method := "GET"
+	  url := fmt.Sprintf("%s/v1/affiliation/all", os.Getenv("DA_API_URL"))
+	  mPrintf("DA affiliation API 'all' request\n")
+	  req, err := http.NewRequest(method, os.ExpandEnv(url), nil)
+	  if err != nil {
+	    err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, url)
+	    fatalOnError(err, false)
+	    return
+	  }
+	  resp, err := http.DefaultClient.Do(req)
+	  if err != nil {
+	    err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, url)
+	    fatalOnError(err, false)
+	    return
+	  }
+	  defer func() {
+	    _ = resp.Body.Close()
+	  }()
+	  if resp.StatusCode != 200 {
+	    body, err := ioutil.ReadAll(resp.Body)
+	    if err != nil {
+	      err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, url)
+	      fatalOnError(err, false)
+	      return
+	    }
+	    err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, url, resp.StatusCode, body)
+	    fatalOnError(err, false)
+	    return
+	  }
+	  var payload allArrayOutput
+	  err = yaml.NewDecoder(resp.Body).Decode(&payload)
+	  if err != nil {
+	    body, err2 := ioutil.ReadAll(resp.Body)
+	    if err2 != nil {
+	      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, url)
+	      fatalOnError(err, false)
+	      return
+	    }
+	    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, url, body)
+	    fatalOnError(err, false)
+	    return
+	  }
+	  ok = true
+	  profs = payload.Profiles
+	*/
+	ret = [3]string{"org", org, ""}
+	mPrintf("org: %s, updated at: %v\n", org, updatedAt)
+	return
+}
+
+func processProfile(ch chan [3]string, uuid string, updatedAt time.Time) (ret [3]string) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("profile %s, updated at: %v error:\n%s\n", uuid, updatedAt, string(debug.Stack()))
+		}
+		if ch != nil {
+			ch <- ret
+		}
+	}()
+	mPrintf("profile: %s, updated at: %v\n", uuid, updatedAt)
+	ret = [3]string{"profile", uuid, ""}
+	return
+}
+
 func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	gw = w
 	info := requestInfo(req)
@@ -208,8 +311,81 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	mPrintf("%d companies to process: %+v\n", len(companies), companies)
 	mPrintf("%d UUIDs to process: %+v\n", len(uuids), uuids)
+	thrN := getThreadsNum()
+	mPrintf("Using %d CPUs\n", thrN)
+	if thrN > 1 {
+		ch := make(chan [3]string)
+		nThreads := 0
+		for index := range companies {
+			go processOrg(ch, companies[index], modCompaniesAry[index])
+			nThreads++
+			if nThreads == thrN {
+				res := <-ch
+				mPrintf("finished %+v\n", res)
+				nThreads--
+			}
+		}
+		for index := range uuids {
+			go processProfile(ch, uuids[index], modUUIDsAry[index])
+			nThreads++
+			if nThreads == thrN {
+				res := <-ch
+				mPrintf("finished %+v\n", res)
+				nThreads--
+			}
+		}
+		for nThreads > 0 {
+			res := <-ch
+			mPrintf("finished %+v\n", res)
+			nThreads--
+		}
+	} else {
+		for index := range companies {
+			processOrg(nil, companies[index], modCompaniesAry[index])
+		}
+		for index := range uuids {
+			res := processProfile(nil, uuids[index], modUUIDsAry[index])
+			mPrintf("finished %+v\n", res)
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "SYNC_OK")
+}
+
+func processTopic(region, key, secret, topic string) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("%s\n", string(debug.Stack()))
+		}
+	}()
+	sns := awsns.New(
+		session.Must(
+			session.NewSession(
+				&aws.Config{
+					Region: aws.String(region),
+					// id, secret, token
+					Credentials: credentials.NewStaticCredentials(key, secret, ""),
+					MaxRetries:  aws.Int(5),
+				},
+			),
+		),
+	)
+	mPrintf("%s: %+v\n", topic, sns)
+	for {
+		// FIXME: subscribe to SNS topic and fetch upadtes from it
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func handleSyncFromSFDC() {
+	region := os.Getenv("AWS_REGION")
+	key := os.Getenv("AWS_KEY")
+	secret := os.Getenv("AWS_SECRET")
+	topic := os.Getenv("AWS_TOPIC")
+	for {
+		processTopic(region, key, secret, topic)
+		mPrintf("process topic finished, restarting\n")
+	}
 }
 
 func initSHDB() *sqlx.DB {
@@ -232,6 +408,8 @@ func initSHDB() *sqlx.DB {
 func checkEnv() {
 	requiredEnv := []string{
 		"SH_DB_ENDPOINT",
+		"ORG_SVC_URL",
+		"USER_SVC_URL",
 		"AWS_REGION",
 		"AWS_KEY",
 		"AWS_SECRET",
@@ -259,6 +437,7 @@ func serve() {
 	}()
 	gMtx = &sync.Mutex{}
 	gDB = initSHDB()
+	go handleSyncFromSFDC()
 	http.HandleFunc("/sync-to-sfdc", handleSyncToSFDC)
 	fatalOnError(http.ListenAndServe("0.0.0.0:6060", nil), true)
 }

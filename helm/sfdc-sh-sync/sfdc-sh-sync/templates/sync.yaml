@@ -53,6 +53,16 @@ spec:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
               key: SH_DB_ENDPOINT.secret
+        - name: ORG_SVC_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: ORG_SVC_URL.secret
+        - name: USER_SVC_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: USER_SVC_URL.secret
         - name: AWS_REGION
           valueFrom:
             secretKeyRef:
