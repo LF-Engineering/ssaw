@@ -172,7 +172,7 @@ func requestInfo(r *http.Request) string {
 	return fmt.Sprintf("IP: %s, method: %s, path: %s", r.RemoteAddr, method, path)
 }
 
-func processOrg(ch chan [3]string, org string, updatedAt time.Time) (ret [3]string) {
+func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Time) (ret [3]string) {
 	defer func() {
 		if recover() != nil {
 			mPrintf("org %s, updated at: %v error:\n%s\n", org, updatedAt, string(debug.Stack()))
@@ -181,58 +181,61 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time) (ret [3]stri
 			ch <- ret
 		}
 	}()
+	method := "GET"
+	xRequestID := fmt.Sprintf("sync-from-sfdc-%s{{%s}}", time.Now().Format(time.RFC3339Nano), org)
+	url := fmt.Sprintf("%s/orgs/search/[%s]", apiURL, org)
+	req, err := http.NewRequest(method, os.ExpandEnv(url), nil)
+	if err != nil {
+		err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, url)
+		fatalOnError(err, false)
+		return
+	}
+	req.Header.Set("X-ACL", lfAuth)
+	req.Header.Set("X-REQUEST-ID", xRequestID)
+	mPrintf("request: %+v\n", req)
 	/*
-	  method := "GET"
-	  url := fmt.Sprintf("%s/v1/affiliation/all", os.Getenv("DA_API_URL"))
-	  mPrintf("DA affiliation API 'all' request\n")
-	  req, err := http.NewRequest(method, os.ExpandEnv(url), nil)
-	  if err != nil {
-	    err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, url)
-	    fatalOnError(err, false)
-	    return
-	  }
-	  resp, err := http.DefaultClient.Do(req)
-	  if err != nil {
-	    err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, url)
-	    fatalOnError(err, false)
-	    return
-	  }
-	  defer func() {
-	    _ = resp.Body.Close()
-	  }()
-	  if resp.StatusCode != 200 {
-	    body, err := ioutil.ReadAll(resp.Body)
-	    if err != nil {
-	      err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, url)
-	      fatalOnError(err, false)
-	      return
-	    }
-	    err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, url, resp.StatusCode, body)
-	    fatalOnError(err, false)
-	    return
-	  }
-	  var payload allArrayOutput
-	  err = yaml.NewDecoder(resp.Body).Decode(&payload)
-	  if err != nil {
-	    body, err2 := ioutil.ReadAll(resp.Body)
-	    if err2 != nil {
-	      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, url)
-	      fatalOnError(err, false)
-	      return
-	    }
-	    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, url, body)
-	    fatalOnError(err, false)
-	    return
-	  }
-	  ok = true
-	  profs = payload.Profiles
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, url)
+			fatalOnError(err, false)
+			return
+		}
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+		if resp.StatusCode != 200 {
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, url)
+				fatalOnError(err, false)
+				return
+			}
+			err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, url, resp.StatusCode, body)
+			fatalOnError(err, false)
+			return
+		}
+		  var payload allArrayOutput
+		  err = yaml.NewDecoder(resp.Body).Decode(&payload)
+		  if err != nil {
+		    body, err2 := ioutil.ReadAll(resp.Body)
+		    if err2 != nil {
+		      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, url)
+		      fatalOnError(err, false)
+		      return
+		    }
+		    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, url, body)
+		    fatalOnError(err, false)
+		    return
+		  }
+		  ok = true
+		  profs = payload.Profiles
 	*/
 	ret = [3]string{"org", org, ""}
 	mPrintf("org: %s, updated at: %v\n", org, updatedAt)
 	return
 }
 
-func processProfile(ch chan [3]string, uuid string, updatedAt time.Time) (ret [3]string) {
+func processProfile(ch chan [3]string, apiURL, lfAuth, uuid string, updatedAt time.Time) (ret [3]string) {
 	defer func() {
 		if recover() != nil {
 			mPrintf("profile %s, updated at: %v error:\n%s\n", uuid, updatedAt, string(debug.Stack()))
@@ -244,6 +247,31 @@ func processProfile(ch chan [3]string, uuid string, updatedAt time.Time) (ret [3
 	mPrintf("profile: %s, updated at: %v\n", uuid, updatedAt)
 	ret = [3]string{"profile", uuid, ""}
 	return
+}
+
+func processTopic(region, key, secret, topic string) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("%s\n", string(debug.Stack()))
+		}
+	}()
+	sns := awsns.New(
+		session.Must(
+			session.NewSession(
+				&aws.Config{
+					Region: aws.String(region),
+					// id, secret, token
+					Credentials: credentials.NewStaticCredentials(key, secret, ""),
+					MaxRetries:  aws.Int(5),
+				},
+			),
+		),
+	)
+	mPrintf("%s: %+v\n", topic, sns)
+	for {
+		// FIXME: subscribe to SNS topic and fetch upadtes from it
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
@@ -311,13 +339,16 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	mPrintf("%d companies to process: %+v\n", len(companies), companies)
 	mPrintf("%d UUIDs to process: %+v\n", len(uuids), uuids)
+	orgAPIURL := os.Getenv("ORG_SVC_URL")
+	userAPIURL := os.Getenv("USER_SVC_URL")
+	lfAuth := os.Getenv("LF_AUTH")
 	thrN := getThreadsNum()
 	mPrintf("Using %d CPUs\n", thrN)
 	if thrN > 1 {
 		ch := make(chan [3]string)
 		nThreads := 0
 		for index := range companies {
-			go processOrg(ch, companies[index], modCompaniesAry[index])
+			go processOrg(ch, orgAPIURL, lfAuth, companies[index], modCompaniesAry[index])
 			nThreads++
 			if nThreads == thrN {
 				res := <-ch
@@ -326,7 +357,7 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 		for index := range uuids {
-			go processProfile(ch, uuids[index], modUUIDsAry[index])
+			go processProfile(ch, userAPIURL, lfAuth, uuids[index], modUUIDsAry[index])
 			nThreads++
 			if nThreads == thrN {
 				res := <-ch
@@ -341,40 +372,15 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		for index := range companies {
-			processOrg(nil, companies[index], modCompaniesAry[index])
+			processOrg(nil, orgAPIURL, lfAuth, companies[index], modCompaniesAry[index])
 		}
 		for index := range uuids {
-			res := processProfile(nil, uuids[index], modUUIDsAry[index])
+			res := processProfile(nil, userAPIURL, lfAuth, uuids[index], modUUIDsAry[index])
 			mPrintf("finished %+v\n", res)
 		}
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "SYNC_OK")
-}
-
-func processTopic(region, key, secret, topic string) {
-	defer func() {
-		if recover() != nil {
-			mPrintf("%s\n", string(debug.Stack()))
-		}
-	}()
-	sns := awsns.New(
-		session.Must(
-			session.NewSession(
-				&aws.Config{
-					Region: aws.String(region),
-					// id, secret, token
-					Credentials: credentials.NewStaticCredentials(key, secret, ""),
-					MaxRetries:  aws.Int(5),
-				},
-			),
-		),
-	)
-	mPrintf("%s: %+v\n", topic, sns)
-	for {
-		// FIXME: subscribe to SNS topic and fetch upadtes from it
-		time.Sleep(10 * time.Second)
-	}
 }
 
 func handleSyncFromSFDC() {
