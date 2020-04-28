@@ -5,7 +5,7 @@ Bidirectional sync between SFDC service and SortingHat database
 
 - To compile locally use: `make`.
 - To run local sync service: `./serve.sh`.
-- To do request to local service (check service used for reacting `sync-to-sfdc` request): `PR=pr_number ./sync-to-sfdc.sh`.
+- To do request to local service (check service used for reacting `sync-to-sfdc` request): `./sync-to-sfdc.sh`.
 
 # Docker
 

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"reflect"
@@ -183,55 +185,60 @@ func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Ti
 	}()
 	method := "GET"
 	xRequestID := fmt.Sprintf("sync-from-sfdc-%s{{%s}}", time.Now().Format(time.RFC3339Nano), org)
-	url := fmt.Sprintf("%s/orgs/search/[%s]", apiURL, org)
-	req, err := http.NewRequest(method, os.ExpandEnv(url), nil)
+	params := url.Values{}
+	params.Add("name", []string{org})
+	surl := fmt.Sprintf("%s/orgs/search?%s", apiURL, params.Encode())
+	req, err := http.NewRequest(method, surl, nil)
 	if err != nil {
-		err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, url)
+		err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, surl)
 		fatalOnError(err, false)
 		return
 	}
-	req.Header.Set("X-ACL", lfAuth)
+	//req.Header.Set("X-ACL", lfAuth)
+	ary := strings.Split(lfAuth, ":")
+	req.Header.Set("X-ACL", ary[0])
+	req.Header.Set("Bearer", ary[1])
 	req.Header.Set("X-REQUEST-ID", xRequestID)
 	mPrintf("request: %+v\n", req)
-	/*
-		resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, surl)
+		fatalOnError(err, false)
+		return
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, url)
+			err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, surl)
 			fatalOnError(err, false)
 			return
 		}
-		defer func() {
-			_ = resp.Body.Close()
-		}()
-		if resp.StatusCode != 200 {
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, url)
-				fatalOnError(err, false)
-				return
-			}
-			err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, url, resp.StatusCode, body)
-			fatalOnError(err, false)
-			return
-		}
-		  var payload allArrayOutput
-		  err = yaml.NewDecoder(resp.Body).Decode(&payload)
-		  if err != nil {
-		    body, err2 := ioutil.ReadAll(resp.Body)
-		    if err2 != nil {
-		      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, url)
-		      fatalOnError(err, false)
-		      return
-		    }
-		    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, url, body)
-		    fatalOnError(err, false)
-		    return
-		  }
-		  ok = true
-		  profs = payload.Profiles
+		err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, surl, resp.StatusCode, body)
+		fatalOnError(err, false)
+		return
+	}
+	/*
+	  var payload allArrayOutput
+	  err = yaml.NewDecoder(resp.Body).Decode(&payload)
+	  if err != nil {
+	    body, err2 := ioutil.ReadAll(resp.Body)
+	    if err2 != nil {
+	      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, surl)
+	      fatalOnError(err, false)
+	      return
+	    }
+	    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, surl, body)
+	    fatalOnError(err, false)
+	    return
+	  }
+	  ok = true
+	  profs = payload.Profiles
 	*/
 	ret = [3]string{"org", org, ""}
-	mPrintf("org: %s, updated at: %v\n", org, updatedAt)
+	//mPrintf("org: %s, updated at: %v\n", org, updatedAt)
 	return
 }
 
@@ -244,7 +251,7 @@ func processProfile(ch chan [3]string, apiURL, lfAuth, uuid string, updatedAt ti
 			ch <- ret
 		}
 	}()
-	mPrintf("profile: %s, updated at: %v\n", uuid, updatedAt)
+	//mPrintf("profile: %s, updated at: %v\n", uuid, updatedAt)
 	ret = [3]string{"profile", uuid, ""}
 	return
 }
