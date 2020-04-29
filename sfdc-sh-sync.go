@@ -185,8 +185,8 @@ func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Ti
 	}()
 	method := "GET"
 	xRequestID := fmt.Sprintf("sync-from-sfdc-%s{{%s}}", time.Now().Format(time.RFC3339Nano), org)
-	params := url.Values{}
-	params.Add("name", []string{org})
+  params := url.Values{}
+	params.Add("name", "[" + org + "]")
 	surl := fmt.Sprintf("%s/orgs/search?%s", apiURL, params.Encode())
 	req, err := http.NewRequest(method, surl, nil)
 	if err != nil {
