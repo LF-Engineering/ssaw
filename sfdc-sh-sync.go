@@ -185,8 +185,8 @@ func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Ti
 	}()
 	method := "GET"
 	xRequestID := fmt.Sprintf("sync-from-sfdc-%s{{%s}}", time.Now().Format(time.RFC3339Nano), org)
-  params := url.Values{}
-	params.Add("name", "[" + org + "]")
+	params := url.Values{}
+	params.Add("name", "["+org+"]")
 	surl := fmt.Sprintf("%s/orgs/search?%s", apiURL, params.Encode())
 	req, err := http.NewRequest(method, surl, nil)
 	if err != nil {
@@ -401,7 +401,7 @@ func handleSyncFromSFDC() {
 	}
 }
 
-func initSHDB() *sqlx.DB {
+func initSHDB() {
 	dbURL := os.Getenv("SH_DB_ENDPOINT")
 	if !strings.Contains(dbURL, "parseTime=true") {
 		if strings.Contains(dbURL, "?") {
@@ -415,7 +415,16 @@ func initSHDB() *sqlx.DB {
 		fatalf(true, "unable to connect to affiliation database: %v", err)
 	}
 	d.SetConnMaxLifetime(time.Second)
-	return d
+	gDB = d
+	// FIXME: all of the code from this repo will finally live else where
+	_, err = exec(nil, "set @origin = ?", "exampleOrigin")
+	if err != nil {
+		fatalf(true, "unable to connect to origin session variable: %v", err)
+	}
+	_, err = exec(nil, "insert into organizations(name) values(?)", "exampleCompany")
+	if err != nil {
+		fatalf(true, "unable to create example company: %v", err)
+	}
 }
 
 func checkEnv() {
@@ -449,7 +458,7 @@ func serve() {
 		}
 	}()
 	gMtx = &sync.Mutex{}
-	gDB = initSHDB()
+	initSHDB()
 	go handleSyncFromSFDC()
 	http.HandleFunc("/sync-to-sfdc", handleSyncToSFDC)
 	fatalOnError(http.ListenAndServe("0.0.0.0:6060", nil), true)

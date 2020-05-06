@@ -4,12 +4,15 @@ Bidirectional sync between SFDC service and SortingHat database
 # Running locally
 
 - To compile locally use: `make`.
-- To run local sync service: `./serve.sh`.
+- To run local sync service: `./serve.sh test|prod` (it will use prod/test `*.secret` files for all environment variables.
 - To do request to local service (check service used for reacting `sync-to-sfdc` request): `./sync-to-sfdc.sh`.
 
 # DB triggers
 
 - To test DB triggers on a local database execute: `mysql ... < ./sql/sh_sync_test.sql`.
+- Use `` SH_DB_ENDPOINT="`cat ./helm/sfdc-sh-sync/sfdc-sh-sync/secrets/SH_DB_ENDPOINT.secret.example`" ./serve.sh `` to use local SortingHat DB running from docker (using `LF-Engineering/dev-analytics-affiliation` repo).
+- After starting against a local docker MariaDB run: `SH_USR=sortinghat SH_PASS=pwd SH_DB=sortinghat ./sh/mariadb_sortinghat_shell.sh`, then confirm that company with `src=exampleOrigin` was created.
+- Execute: `select * from organizations where src = 'exampleOrigin'` (there will be company with name `exampleCompany`).
 
 # Docker
 

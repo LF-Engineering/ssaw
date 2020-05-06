@@ -105,3 +105,12 @@ select * from uidentities where uuid like 'origin:%';
 select count(*) as sync_uuids from sync_uuids;
 select * from sync_uuids order by last_modified;
 
+-- cleanup at the end
+delete from enrollments where uuid like 'origin:%';
+delete from identities where uuid like 'origin:%';
+delete from profiles where uuid like 'origin:%';
+delete from uidentities where uuid like 'origin:%';
+delete from domains_organizations where domain like 'origin.%';
+delete from organizations where name like 'origin:%';
+delete from sync_orgs;
+delete from sync_uuids;
