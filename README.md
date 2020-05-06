@@ -7,6 +7,10 @@ Bidirectional sync between SFDC service and SortingHat database
 - To run local sync service: `./serve.sh`.
 - To do request to local service (check service used for reacting `sync-to-sfdc` request): `./sync-to-sfdc.sh`.
 
+# DB triggers
+
+- To test DB triggers on a local database execute: `mysql ... < ./sql/sh_sync_test.sql`.
+
 # Docker
 
 - Build docker image: `DOCKER_USER=... docker/build_image.sh`.
