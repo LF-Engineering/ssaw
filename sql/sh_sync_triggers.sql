@@ -115,7 +115,7 @@ for each row begin
 end$
 create trigger profiles_after_insert_trigger after insert on profiles
 for each row begin
-  insert into sync_uuids(uuid, src, op) values(new.name, new.src, 'i') on duplicate key update last_modified = now();
+  insert into sync_uuids(uuid, src, op) values(new.uuid, new.src, 'i') on duplicate key update last_modified = now();
 end$
 create trigger profiles_before_update_trigger before update on profiles
 for each row begin
