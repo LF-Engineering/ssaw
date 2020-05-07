@@ -19,7 +19,7 @@ func Sync(origin string) (err error) {
 		return
 	}
 	method := http.MethodPost
-	url := fmt.Sprintf("http://%s/sync/%s", syncURL, origin)
+	url := fmt.Sprintf("%s/sync/%s", syncURL, origin)
 	req, e := http.NewRequest(method, url, nil)
 	if e != nil {
 		err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, url)

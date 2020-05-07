@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time" //"github.com/LF-Engineering/ssaw/ssawsync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -613,8 +613,6 @@ func checkEnv() {
 }
 
 func serve() {
-	//e := ssawsync.Sync("json2hat")
-	//fmt.Printf("err: %v\n", e)
 	mPrintf("Starting serve\n")
 	checkEnv()
 	sigs := make(chan os.Signal, 1)
