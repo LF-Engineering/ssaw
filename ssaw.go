@@ -190,6 +190,11 @@ func jsonEscape(str string) string {
 }
 
 func getToken() (err error) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("getToken eror:\n%s\n", err, string(debug.Stack()))
+		}
+	}()
 	data := fmt.Sprintf(
 		`{"grant_type":"client_credentials","client_id":"%s","client_secret":"%s","audience":"%s","scope":"access:api"}`,
 		jsonEscape(gAuth0ClientID),
@@ -200,16 +205,16 @@ func getToken() (err error) {
 	payloadBody := bytes.NewReader(payloadBytes)
 	method := "POST"
 	surl := fmt.Sprintf("%s/oauth/token", gAuth0URL)
-	req, err := http.NewRequest(method, surl, payloadBody)
-	if err != nil {
-		err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, surl)
+	req, e := http.NewRequest(method, surl, payloadBody)
+	if e != nil {
+		err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, surl)
 		fatalOnError(err, false)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, surl)
+	resp, e := http.DefaultClient.Do(req)
+	if e != nil {
+		err = fmt.Errorf("do request error: %+v for %s url: %s\n", e, method, surl)
 		fatalOnError(err, false)
 		return
 	}
@@ -245,9 +250,13 @@ func getToken() (err error) {
 }
 
 func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op string) (ret [3]string) {
+	var err error
 	defer func() {
 		if recover() != nil {
 			mPrintf("org %s, updated at %v, src %s, op %s, error:\n%s\n", org, updatedAt, src, op, string(debug.Stack()))
+		}
+		if err != nil {
+			ret[2] = err.Error()
 		}
 		if ch != nil {
 			ch <- ret
@@ -258,18 +267,18 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 		params := url.Values{}
 		params.Add("name", org)
 		surl := fmt.Sprintf("%s/orgs/search?%s", gOrgAPIURL, params.Encode())
-		req, err := http.NewRequest(method, surl, nil)
-		if err != nil {
-			err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, surl)
+		req, e := http.NewRequest(method, surl, nil)
+		if e != nil {
+			err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, surl)
 			fatalOnError(err, false)
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", gLFAuth)
 		//mPrintf("request: %+v\n", req)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, surl)
+		resp, e := http.DefaultClient.Do(req)
+		if e != nil {
+			err = fmt.Errorf("do request error: %+v for %s url: %s\n", e, method, surl)
 			fatalOnError(err, false)
 			return
 		}
@@ -284,10 +293,10 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			continue
 		}
 		if resp.StatusCode != 200 {
-			body, err := ioutil.ReadAll(resp.Body)
+			body, e := ioutil.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			if err != nil {
-				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, surl)
+			if e != nil {
+				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", e, method, surl)
 				fatalOnError(err, false)
 				return
 			}
@@ -295,7 +304,12 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			fatalOnError(err, false)
 			return
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, e := ioutil.ReadAll(resp.Body)
+		if e != nil {
+			err = e
+			fatalOnError(err, false)
+			return
+		}
 		_ = resp.Body.Close()
 		mPrintf("%s\n", body)
 		ret = [3]string{"org", org, ""}
@@ -305,9 +319,13 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 }
 
 func processProfile(ch chan [3]string, uuid string, updatedAt time.Time, src, op string) (ret [3]string) {
+	var err error
 	defer func() {
 		if recover() != nil {
 			mPrintf("profile %s, updated at %v, src %s, op %s, error:\n%s\n", uuid, updatedAt, src, op, string(debug.Stack()))
+		}
+		if err != nil {
+			ret[2] = err.Error()
 		}
 		if ch != nil {
 			ch <- ret
@@ -434,6 +452,7 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	mPrintf("%d companies to process\n", len(companies))
 	mPrintf("Using %d CPUs\n", thrN)
+	failedOrgs := 0
 	if thrN > 1 {
 		ch := make(chan [3]string)
 		nThreads := 0
@@ -444,16 +463,26 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 				res := <-ch
 				mPrintf("finished %+v\n", res)
 				nThreads--
+				if res[2] != "" {
+					failedOrgs++
+				}
 			}
 		}
 		for nThreads > 0 {
 			res := <-ch
 			mPrintf("finished %+v\n", res)
 			nThreads--
+			if res[2] != "" {
+				failedOrgs++
+			}
 		}
 	} else {
 		for index := range companies {
-			processOrg(nil, companies[index], modifieds[index], srcs[index], ops[index])
+			res := processOrg(nil, companies[index], modifieds[index], srcs[index], ops[index])
+			mPrintf("finished %+v\n", res)
+			if res[2] != "" {
+				failedOrgs++
+			}
 		}
 	}
 
@@ -489,6 +518,7 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	mPrintf("%d UUIDs to process\n", len(uuids))
 	mPrintf("Using %d CPUs\n", thrN)
+	failedProfiles := 0
 	if thrN > 1 {
 		ch := make(chan [3]string)
 		nThreads := 0
@@ -499,18 +529,31 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 				res := <-ch
 				mPrintf("finished %+v\n", res)
 				nThreads--
+				if res[2] != "" {
+					failedProfiles++
+				}
 			}
 		}
 		for nThreads > 0 {
 			res := <-ch
 			mPrintf("finished %+v\n", res)
 			nThreads--
+			if res[2] != "" {
+				failedProfiles++
+			}
 		}
 	} else {
 		for index := range uuids {
 			res := processProfile(nil, uuids[index], modifieds[index], srcs[index], ops[index])
 			mPrintf("finished %+v\n", res)
+			if res[2] != "" {
+				failedProfiles++
+			}
 		}
+	}
+	if failedOrgs > 0 || failedProfiles > 0 {
+		fatalf(false, "failed organizations:%d profiles:%d", failedOrgs, failedProfiles)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "SYNC_OK")

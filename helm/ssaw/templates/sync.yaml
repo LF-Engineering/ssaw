@@ -83,10 +83,25 @@ spec:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
               key: AWS_TOPIC.secret
-        - name: LF_AUTH
+        - name: AUTH0_URL
           valueFrom:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
-              key: LF_AUTH.secret
+              key: AUTH0_URL.secret
+        - name: AUTH0_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AUTH0_AUDIENCE.secret
+        - name: AUTH0_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AUTH0_CLIENT_ID.secret
+        - name: AUTH0_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AUTH0_CLIENT_SECRET.secret
       restartPolicy: {{ .Values.syncRestartPolicy }}
 {{ end }}
