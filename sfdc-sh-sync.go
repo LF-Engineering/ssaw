@@ -416,14 +416,9 @@ func initSHDB() {
 	}
 	d.SetConnMaxLifetime(time.Second)
 	gDB = d
-	// FIXME: all of the code from this repo will finally live else where
 	_, err = exec(nil, "set @origin = ?", "exampleOrigin")
 	if err != nil {
 		fatalf(true, "unable to connect to origin session variable: %v", err)
-	}
-	_, err = exec(nil, "insert into organizations(name) values(?)", "exampleCompany")
-	if err != nil {
-		fatalf(true, "unable to create example company: %v", err)
 	}
 }
 
