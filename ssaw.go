@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
+	"time" //"github.com/LF-Engineering/ssaw/ssawsync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -203,7 +203,7 @@ func getToken() (err error) {
 	)
 	payloadBytes := []byte(data)
 	payloadBody := bytes.NewReader(payloadBytes)
-	method := "POST"
+	method := http.MethodPost
 	surl := fmt.Sprintf("%s/oauth/token", gAuth0URL)
 	req, e := http.NewRequest(method, surl, payloadBody)
 	if e != nil {
@@ -263,7 +263,7 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 		}
 	}()
 	for i := 0; i < 2; i++ {
-		method := "GET"
+		method := http.MethodGet
 		params := url.Values{}
 		params.Add("name", org)
 		surl := fmt.Sprintf("%s/orgs/search?%s", gOrgAPIURL, params.Encode())
@@ -613,6 +613,8 @@ func checkEnv() {
 }
 
 func serve() {
+	//e := ssawsync.Sync("json2hat")
+	//fmt.Printf("err: %v\n", e)
 	mPrintf("Starting serve\n")
 	checkEnv()
 	sigs := make(chan os.Signal, 1)
