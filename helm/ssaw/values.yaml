@@ -1,5 +1,5 @@
 # skipSecrets (will not attempt to create secrets, if you want to create new secrets delete current secrets first and do not set this flag)
-# skipNamespace (will skip sfdc-sh-sync namespace creation)
+# skipNamespace (will skip ssaw namespace creation)
 # skiSync (will skip deploying main sync pod)
 # skipSecrets: 1
 # skipNamespace: 1
@@ -9,15 +9,15 @@
 deployEnv: 'set-me'
 dryRun: ''
 concurrencyPolicy: Forbid
-fullnameOverride: sfdc-sh-sync
+fullnameOverride: ssaw
 imagePullPolicy: Always
-syncCommand: '/usr/bin/sfdc-sh-sync'
-syncImage: 'lukaszgryglicki/lf-sfdc-sh-sync'
-syncServiceName: sfdc-sh-sync-service
-syncPodName: sfdc-sh-sync
+syncCommand: '/usr/bin/ssaw'
+syncImage: 'lukaszgryglicki/ssaw'
+syncServiceName: ssaw-service
+syncPodName: ssaw
 syncRestartPolicy: Always
-syncSecret: sfdc-sh-sync-secret
-name: sfdc-sh-sync
-namespace: sfdc-sh-sync
-nameOverride: sfdc-sh-sync
+syncSecret: ssaw-secret
+name: ssaw
+namespace: ssaw
+nameOverride: ssaw
 secretType: Opaque

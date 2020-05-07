@@ -1,5 +1,5 @@
 #!/bin/bash
-# NS=sfdc-sh-sync - set namespace name, default sfdc-sh-sync
+# NS=ssaw - set namespace name, default ssaw
 helm=helm
 denv=test
 if [ -z "$1" ]
@@ -11,7 +11,7 @@ else
 fi
 if [ -z "$NS" ]
 then
-  NS=sfdc-sh-sync
+  NS=ssaw
 fi
 change_namespace.sh $1 "$NS"
 $helm delete "$NS"

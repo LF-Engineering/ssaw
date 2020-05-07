@@ -7,13 +7,13 @@ metadata:
   namespace: '{{ .Values.namespace }}'
   name: '{{ .Values.syncServiceName }}'
   labels:
-    name: sfdc-sh-sync
+    name: ssaw
 spec:
   ports:
   - port: 6060
     targetPort: 6060
   selector:
-    name: sfdc-sh-sync
+    name: ssaw
   type: LoadBalancer
 ---
 apiVersion: apps/v1
@@ -22,7 +22,7 @@ metadata:
   namespace: '{{ .Values.namespace }}'
   name: '{{ .Values.syncPodName }}'
   labels:
-    name: sfdc-sh-sync
+    name: ssaw
 spec:
   replicas: 1
   strategy:
@@ -32,12 +32,12 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      name: sfdc-sh-sync
+      name: ssaw
   template:
     metadata:
       namespace: '{{ .Values.namespace }}'
       labels:
-        name: sfdc-sh-sync
+        name: ssaw
     spec:
       containers:
       - command:

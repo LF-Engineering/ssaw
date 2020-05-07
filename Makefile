@@ -1,5 +1,5 @@
-GO_BIN_FILES=sfdc-sh-sync.go
-GO_BIN_CMDS=sfdc-sh-sync
+GO_BIN_FILES=ssaw.go
+GO_BIN_CMDS=ssaw
 GO_ENV=CGO_ENABLED=0
 GO_BUILD=go build -ldflags '-s -w'
 GO_INSTALL=go install -ldflags '-s'
@@ -10,13 +10,13 @@ GO_CONST=goconst
 GO_IMPORTS=goimports -w
 GO_USEDEXPORTS=usedexports
 GO_ERRCHECK=errcheck -asserts -ignore '[FS]?[Pp]rint*'
-BINARIES=sfdc-sh-sync
+BINARIES=ssaw
 STRIP=strip
 
 all: check ${BINARIES}
 
-sfdc-sh-sync: sfdc-sh-sync.go
-	 ${GO_ENV} ${GO_BUILD} -o sfdc-sh-sync sfdc-sh-sync.go
+ssaw: ssaw.go
+	 ${GO_ENV} ${GO_BUILD} -o ssaw ssaw.go
 
 fmt: ${GO_BIN_FILES}
 	./for_each_go_file.sh "${GO_FMT}"

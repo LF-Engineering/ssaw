@@ -3,6 +3,6 @@ Please provide secret values for each file in `./secrets/*.secret.example` savin
 Please note that `vim` automatically adds new line to all text files, to remove it run `truncate -s -1` on a saved file.
 
 To install:
-- `helm install sfdc-sh-sync ./sfdc-sh-sync --set deployEnv=test|prod`.
+- `helm install ssaw ./ssaw --set deployEnv=test|prod`.
 
-Please note variables commented out in `./sfdc-sh-sync/values.yaml`. You can either uncomment them or pass their values via `--set variable=name`.
+Please note variables commented out in `./ssaw/values.yaml`. You can either uncomment them or pass their values via `--set variable=name`.
