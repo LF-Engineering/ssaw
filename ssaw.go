@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -29,12 +31,20 @@ import (
 
 const (
 	dateTimeFormatMillis = "2006-01-02 15:04:05.999"
+	cAll                 = "all"
 )
 
 var (
-	gMtx *sync.Mutex
-	gw   http.ResponseWriter
-	gDB  *sqlx.DB
+	gMtx               *sync.Mutex
+	gw                 http.ResponseWriter
+	gDB                *sqlx.DB
+	gAuth0URL          string
+	gAuth0ClientID     string
+	gAuth0ClientSecret string
+	gAuth0Audience     string
+	gLFAuth            string
+	gUserAPIURL        string
+	gOrgAPIURL         string
 )
 
 func mPrintf(format string, args ...interface{}) (n int, err error) {
@@ -174,32 +184,29 @@ func requestInfo(r *http.Request) string {
 	return fmt.Sprintf("IP: %s, method: %s, path: %s", r.RemoteAddr, method, path)
 }
 
-func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Time) (ret [3]string) {
-	defer func() {
-		if recover() != nil {
-			mPrintf("org %s, updated at: %v error:\n%s\n", org, updatedAt, string(debug.Stack()))
-		}
-		if ch != nil {
-			ch <- ret
-		}
-	}()
-	method := "GET"
-	xRequestID := fmt.Sprintf("sync-from-sfdc-%s{{%s}}", time.Now().Format(time.RFC3339Nano), org)
-	params := url.Values{}
-	params.Add("name", "["+org+"]")
-	surl := fmt.Sprintf("%s/orgs/search?%s", apiURL, params.Encode())
-	req, err := http.NewRequest(method, surl, nil)
+func jsonEscape(str string) string {
+	b, _ := json.Marshal(str)
+	return string(b[1 : len(b)-1])
+}
+
+func getToken() (err error) {
+	data := fmt.Sprintf(
+		`{"grant_type":"client_credentials","client_id":"%s","client_secret":"%s","audience":"%s","scope":"access:api"}`,
+		jsonEscape(gAuth0ClientID),
+		jsonEscape(gAuth0ClientSecret),
+		jsonEscape(gAuth0Audience),
+	)
+	payloadBytes := []byte(data)
+	payloadBody := bytes.NewReader(payloadBytes)
+	method := "POST"
+	surl := fmt.Sprintf("%s/oauth/token", gAuth0URL)
+	req, err := http.NewRequest(method, surl, payloadBody)
 	if err != nil {
 		err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, surl)
 		fatalOnError(err, false)
 		return
 	}
-	//req.Header.Set("X-ACL", lfAuth)
-	ary := strings.Split(lfAuth, ":")
-	req.Header.Set("X-ACL", ary[0])
-	req.Header.Set("Bearer", ary[1])
-	req.Header.Set("X-REQUEST-ID", xRequestID)
-	mPrintf("request: %+v\n", req)
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, surl)
@@ -210,8 +217,8 @@ func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Ti
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != 200 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
+		body, err2 := ioutil.ReadAll(resp.Body)
+		if err2 != nil {
 			err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, surl)
 			fatalOnError(err, false)
 			return
@@ -220,32 +227,87 @@ func processOrg(ch chan [3]string, apiURL, lfAuth, org string, updatedAt time.Ti
 		fatalOnError(err, false)
 		return
 	}
-	/*
-	  var payload allArrayOutput
-	  err = yaml.NewDecoder(resp.Body).Decode(&payload)
-	  if err != nil {
-	    body, err2 := ioutil.ReadAll(resp.Body)
-	    if err2 != nil {
-	      err2 = fmt.Errorf("ReadAll yaml request error: %+v, %+v for %s url: %s\n", err, err2, method, surl)
-	      fatalOnError(err, false)
-	      return
-	    }
-	    err = fmt.Errorf("yaml decode error: %+v for %s url: %s\nBody: %s\n", err, method, surl, body)
-	    fatalOnError(err, false)
-	    return
-	  }
-	  ok = true
-	  profs = payload.Profiles
-	*/
-	ret = [3]string{"org", org, ""}
-	//mPrintf("org: %s, updated at: %v\n", org, updatedAt)
+	var rdata struct {
+		Token string `json:"access_token"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&rdata)
+	if err != nil {
+		fatalOnError(err, false)
+		return
+	}
+	if rdata.Token == "" {
+		fatalOnError(fmt.Errorf("empty token retuned"), false)
+		return
+	}
+	gLFAuth = "Bearer " + rdata.Token
+	mPrintf("Received new token (length %d)\n", len(gLFAuth))
 	return
 }
 
-func processProfile(ch chan [3]string, apiURL, lfAuth, uuid string, updatedAt time.Time) (ret [3]string) {
+func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op string) (ret [3]string) {
 	defer func() {
 		if recover() != nil {
-			mPrintf("profile %s, updated at: %v error:\n%s\n", uuid, updatedAt, string(debug.Stack()))
+			mPrintf("org %s, updated at %v, src %s, op %s, error:\n%s\n", org, updatedAt, src, op, string(debug.Stack()))
+		}
+		if ch != nil {
+			ch <- ret
+		}
+	}()
+	for i := 0; i < 2; i++ {
+		method := "GET"
+		params := url.Values{}
+		params.Add("name", org)
+		surl := fmt.Sprintf("%s/orgs/search?%s", gOrgAPIURL, params.Encode())
+		req, err := http.NewRequest(method, surl, nil)
+		if err != nil {
+			err = fmt.Errorf("new request error: %+v for %s url: %s\n", err, method, surl)
+			fatalOnError(err, false)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", gLFAuth)
+		//mPrintf("request: %+v\n", req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			err = fmt.Errorf("do request error: %+v for %s url: %s\n", err, method, surl)
+			fatalOnError(err, false)
+			return
+		}
+		if i == 0 && resp.StatusCode == 401 {
+			_ = resp.Body.Close()
+			mPrintf("Token is invalid, trying to generate another one\n")
+			err = getToken()
+			if err != nil {
+				fatalOnError(err, false)
+				return
+			}
+			continue
+		}
+		if resp.StatusCode != 200 {
+			body, err := ioutil.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if err != nil {
+				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", err, method, surl)
+				fatalOnError(err, false)
+				return
+			}
+			err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, surl, resp.StatusCode, body)
+			fatalOnError(err, false)
+			return
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		mPrintf("%s\n", body)
+		ret = [3]string{"org", org, ""}
+		break
+	}
+	return
+}
+
+func processProfile(ch chan [3]string, uuid string, updatedAt time.Time, src, op string) (ret [3]string) {
+	defer func() {
+		if recover() != nil {
+			mPrintf("profile %s, updated at %v, src %s, op %s, error:\n%s\n", uuid, updatedAt, src, op, string(debug.Stack()))
 		}
 		if ch != nil {
 			ch <- ret
@@ -295,76 +357,88 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		mPrintf("unlock mutex\n")
 		gMtx.Unlock()
 	}()
-	var (
-		modified        time.Time
-		modUUIDsAry     []time.Time
-		modCompaniesAry []time.Time
-		uuid            string
-		uuids           []string
-		company         string
-		companies       []string
-	)
-	rows, err := query(nil, "select last_modified, name from orgs_for_sf_sync")
-	if fatalOnError(err, false) {
+	path := html.EscapeString(req.URL.Path)
+	// /sync/origin-name
+	// for example: /sync/json2hat
+	ary := strings.Split(path, "/")
+	if len(ary) != 3 {
+		fatalf(false, "malformed path:%s", path)
 		return
 	}
-	for rows.Next() {
-		err = rows.Scan(&modified, &company)
+	origin := ary[2]
+	mPrintf("origin: %s\n", origin)
+	if gAuth0URL == "" {
+		gAuth0URL = os.Getenv("AUTH0_URL")
+	}
+	if gAuth0ClientID == "" {
+		gAuth0ClientID = os.Getenv("AUTH0_CLIENT_ID")
+	}
+	if gAuth0ClientSecret == "" {
+		gAuth0ClientSecret = os.Getenv("AUTH0_CLIENT_SECRET")
+	}
+	if gAuth0Audience == "" {
+		gAuth0Audience = os.Getenv("AUTH0_AUDIENCE")
+	}
+	if gOrgAPIURL == "" {
+		gOrgAPIURL = os.Getenv("ORG_SVC_URL")
+	}
+	if gUserAPIURL == "" {
+		gUserAPIURL = os.Getenv("USER_SVC_URL")
+	}
+	if gLFAuth == "" {
+		err = getToken()
 		if fatalOnError(err, false) {
 			return
 		}
-		modCompaniesAry = append(modCompaniesAry, modified)
-		companies = append(companies, company)
 	}
-	err = rows.Err()
-	if fatalOnError(err, false) {
-		return
-	}
-	err = rows.Close()
-	if fatalOnError(err, false) {
-		return
-	}
-	rows, err = query(nil, "select last_modified, uuid from uuids_for_sf_sync")
-	if fatalOnError(err, false) {
-		return
-	}
-	for rows.Next() {
-		err = rows.Scan(&modified, &uuid)
-		if fatalOnError(err, false) {
-			return
-		}
-		modUUIDsAry = append(modUUIDsAry, modified)
-		uuids = append(uuids, uuid)
-	}
-	err = rows.Err()
-	if fatalOnError(err, false) {
-		return
-	}
-	err = rows.Close()
-	if fatalOnError(err, false) {
-		return
-	}
-	mPrintf("%d companies to process: %+v\n", len(companies), companies)
-	mPrintf("%d UUIDs to process: %+v\n", len(uuids), uuids)
-	orgAPIURL := os.Getenv("ORG_SVC_URL")
-	userAPIURL := os.Getenv("USER_SVC_URL")
-	lfAuth := os.Getenv("LF_AUTH")
 	thrN := getThreadsNum()
+	var (
+		company   string
+		uuid      string
+		modified  time.Time
+		src       string
+		op        string
+		companies []string
+		uuids     []string
+		modifieds []time.Time
+		srcs      []string
+		ops       []string
+		rows      *sql.Rows
+	)
+	// organizations
+	if origin == cAll {
+		rows, err = query(nil, "select name, last_modified, src, op from sync_orgs")
+	} else {
+		rows, err = query(nil, "select name, last_modified, src, op from sync_orgs where src = ?", origin)
+	}
+	if fatalOnError(err, false) {
+		return
+	}
+	for rows.Next() {
+		err = rows.Scan(&company, &modified, &src, &op)
+		if fatalOnError(err, false) {
+			return
+		}
+		companies = append(companies, company)
+		modifieds = append(modifieds, modified)
+		srcs = append(srcs, src)
+		ops = append(ops, op)
+	}
+	err = rows.Err()
+	if fatalOnError(err, false) {
+		return
+	}
+	err = rows.Close()
+	if fatalOnError(err, false) {
+		return
+	}
+	mPrintf("%d companies to process\n", len(companies))
 	mPrintf("Using %d CPUs\n", thrN)
 	if thrN > 1 {
 		ch := make(chan [3]string)
 		nThreads := 0
 		for index := range companies {
-			go processOrg(ch, orgAPIURL, lfAuth, companies[index], modCompaniesAry[index])
-			nThreads++
-			if nThreads == thrN {
-				res := <-ch
-				mPrintf("finished %+v\n", res)
-				nThreads--
-			}
-		}
-		for index := range uuids {
-			go processProfile(ch, userAPIURL, lfAuth, uuids[index], modUUIDsAry[index])
+			go processOrg(ch, companies[index], modifieds[index], srcs[index], ops[index])
 			nThreads++
 			if nThreads == thrN {
 				res := <-ch
@@ -379,10 +453,62 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		for index := range companies {
-			processOrg(nil, orgAPIURL, lfAuth, companies[index], modCompaniesAry[index])
+			processOrg(nil, companies[index], modifieds[index], srcs[index], ops[index])
 		}
+	}
+
+	// profiles
+	modifieds = []time.Time{}
+	srcs = []string{}
+	ops = []string{}
+	if origin == cAll {
+		rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids")
+	} else {
+		rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids where src = ?", origin)
+	}
+	if fatalOnError(err, false) {
+		return
+	}
+	for rows.Next() {
+		err = rows.Scan(&uuid, &modified, &src, &op)
+		if fatalOnError(err, false) {
+			return
+		}
+		uuids = append(uuids, uuid)
+		modifieds = append(modifieds, modified)
+		srcs = append(srcs, src)
+		ops = append(ops, op)
+	}
+	err = rows.Err()
+	if fatalOnError(err, false) {
+		return
+	}
+	err = rows.Close()
+	if fatalOnError(err, false) {
+		return
+	}
+	mPrintf("%d UUIDs to process\n", len(uuids))
+	mPrintf("Using %d CPUs\n", thrN)
+	if thrN > 1 {
+		ch := make(chan [3]string)
+		nThreads := 0
 		for index := range uuids {
-			res := processProfile(nil, userAPIURL, lfAuth, uuids[index], modUUIDsAry[index])
+			go processProfile(ch, uuids[index], modifieds[index], srcs[index], ops[index])
+			nThreads++
+			if nThreads == thrN {
+				res := <-ch
+				mPrintf("finished %+v\n", res)
+				nThreads--
+			}
+		}
+		for nThreads > 0 {
+			res := <-ch
+			mPrintf("finished %+v\n", res)
+			nThreads--
+		}
+	} else {
+		for index := range uuids {
+			res := processProfile(nil, uuids[index], modifieds[index], srcs[index], ops[index])
 			mPrintf("finished %+v\n", res)
 		}
 	}
@@ -414,11 +540,11 @@ func initSHDB() {
 	if err != nil {
 		fatalf(true, "unable to connect to affiliation database: %v", err)
 	}
-	d.SetConnMaxLifetime(time.Second)
+	//d.SetConnMaxLifetime(time.Second)
 	gDB = d
-	_, err = exec(nil, "set @origin = ?", "exampleOrigin")
+	_, err = exec(nil, "set @origin = ?", "sfdc")
 	if err != nil {
-		fatalf(true, "unable to connect to origin session variable: %v", err)
+		fatalf(true, "unable to set origin session variable: %v", err)
 	}
 }
 
@@ -431,7 +557,10 @@ func checkEnv() {
 		"AWS_KEY",
 		"AWS_SECRET",
 		"AWS_TOPIC",
-		"LF_AUTH",
+		"AUTH0_URL",
+		"AUTH0_AUDIENCE",
+		"AUTH0_CLIENT_ID",
+		"AUTH0_CLIENT_SECRET",
 	}
 	for _, env := range requiredEnv {
 		if os.Getenv(env) == "" {
@@ -441,7 +570,7 @@ func checkEnv() {
 }
 
 func serve() {
-	mPrintf("Starting sync server\n")
+	mPrintf("Starting serve\n")
 	checkEnv()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGUSR1, syscall.SIGALRM)
@@ -455,7 +584,7 @@ func serve() {
 	gMtx = &sync.Mutex{}
 	initSHDB()
 	go handleSyncFromSFDC()
-	http.HandleFunc("/sync-to-sfdc", handleSyncToSFDC)
+	http.HandleFunc("/sync/", handleSyncToSFDC)
 	fatalOnError(http.ListenAndServe("0.0.0.0:6060", nil), true)
 }
 

@@ -32,8 +32,4 @@ if [ -z "${AWS_TOPIC}" ]
 then
   export AWS_TOPIC=`cat helm/ssaw/secrets/AWS_TOPIC.$1.secret`
 fi
-if [ -z "${LF_AUTH}" ]
-then
-  export LF_AUTH=`cat helm/ssaw/secrets/LF_AUTH.$1.secret`
-fi
 ./ssaw

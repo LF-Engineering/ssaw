@@ -6,7 +6,7 @@ Self Serve Affiliations Workflow
 
 - To compile locally use: `make`.
 - To run local sync service: `./serve.sh test|prod` (it will use prod/test `*.secret` files for all environment variables.
-- To do request to local service (check service used for reacting `sync-to-sfdc` request): `./sync-to-sfdc.sh`.
+- To do request to local service (check service used for reacting `sync` request): `./sync.sh origin_name`.
 
 # DB triggers
 
@@ -20,7 +20,7 @@ Self Serve Affiliations Workflow
 - Build docker image: `DOCKER_USER=... docker/build_image.sh`.
 - Run it: `DOCKER_USER=... docker/run.sh`. It will serve on 16060 instead of 6060 port.
 - Shell into the container: `DOCKER_USER=... docker/shell.sh`.
-- Test request, `SYNC_URL` must be provided to specify non-default 16060 port: `SYNC_URL='127.0.0.1:16060' ./sync-to-sfdc.sh`.
+- Test request, `SYNC_URL` must be provided to specify non-default 16060 port: `SYNC_URL='127.0.0.1:16060' ./sync.sh json2hat`.
 
 # Kubernetes/Helm
 
@@ -28,10 +28,10 @@ To deploy on Kubernetes
 
 - Go to `helm/`, run (LF real world example): `./setup.sh prod`.
 - Eventually adjust Helm chart to your needs, including `setup.sh` and `delete.sh` shell scripts.
-- Run from repository root directory (test env): `` SYNC_URL="`cat helm/ssaw/secrets/SYNC_URL.test.secret`" ./sync-to-sfdc.sh ``.
-- Run from repository root directory (prod env): `` SYNC_URL="`cat helm/ssaw/secrets/SYNC_URL.prod.secret`" ./sync-to-sfdc.sh ``.
+- Run from repository root directory (test env): `` SYNC_URL="`cat helm/ssaw/secrets/SYNC_URL.test.secret`" ./sync.sh gitdm ``.
+- Run from repository root directory (prod env): `` SYNC_URL="`cat helm/ssaw/secrets/SYNC_URL.prod.secret`" ./sync.sh da-affiliation-api ``.
 
 # GitHub actions
 
 - Add your sync URL (for example AWS ELB of ssaw service stored in `helm/ssaw/secrets/SYNC_URL.prod.secret`) in GitHub repository (Settings -> Secrets -> New secret: `SYNC_URL`).
-- Configre actions in `.github/workflows/`, for example: `.github/workflows/sync-to-sfdc.yaml`.
+- Configre actions in `.github/workflows/`, for example: `.github/workflows/sync.yaml`.

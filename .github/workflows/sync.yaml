@@ -1,0 +1,13 @@
+---
+name: Sync to sfdc
+on:
+  schedule:
+  - cron:  '30 3 * * *'
+  #- cron:  '*/10 * * * *'
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Sync to sfdc
+      run: |
+        (curl -s "${{ secrets.SYNC_URL }}/sync/all" |& tee output.txt | grep 'SYNC_OK') || ( cat output.txt; exit 1)
