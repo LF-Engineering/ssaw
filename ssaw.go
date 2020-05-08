@@ -589,7 +589,7 @@ func initSHDB() {
 	if err != nil {
 		fatalf(true, "unable to connect to affiliation database: %v", err)
 	}
-	d.SetConnMaxLifetime(10 * time.Second)
+	d.SetConnMaxLifetime(30 * time.Second)
 	gDB = d
 	_, err = exec(nil, "set @origin = ?", "sfdc")
 	if err != nil {
