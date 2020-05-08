@@ -20,6 +20,9 @@ create table sync_uuids(
   primary key(id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_520_ci;
 
+alter table sync_orgs add index sync_orgs_name_idx(name);
+alter table sync_uuids add index sync_uuids_uuid_idx(uuid);
+
 -- source and operation for organizations
 alter table organizations drop column if exists src;
 alter table organizations drop column if exists op;
