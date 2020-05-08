@@ -112,13 +112,5 @@ delete from profiles where uuid like 'origin:%';
 delete from uidentities where uuid like 'origin:%';
 delete from domains_organizations where domain like 'origin.%';
 delete from organizations where name like 'origin:%';
-
-select '===================================================';
-select count(*) as sync_orgs from sync_orgs;
-select * from sync_orgs order by last_modified;
-select count(*) as sync_uuids from sync_uuids;
-select * from sync_uuids order by last_modified;
-
 delete from sync_orgs;
 delete from sync_uuids;
-

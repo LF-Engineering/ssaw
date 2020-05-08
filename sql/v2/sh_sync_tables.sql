@@ -1,23 +1,21 @@
 -- organizations for sync
 drop table if exists sync_orgs;
 create table sync_orgs(
-  id int(11) not null auto_increment,
   name varchar(192) collate utf8mb4_unicode_520_ci not null,
   src varchar(32) collate utf8mb4_unicode_520_ci not null,
   op char(1) collate utf8mb4_unicode_520_ci not null,
   last_modified datetime(6) not null default now(),
-  primary key(id)
+  primary key(name, src)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_520_ci;
 
 -- users/profiles for sync
 drop table if exists sync_uuids;
 create table sync_uuids(
-  id int(11) not null auto_increment,
   uuid varchar(128) collate utf8mb4_unicode_520_ci not null,
   src varchar(32) collate utf8mb4_unicode_520_ci not null,
   op varchar(8) collate utf8mb4_unicode_520_ci not null,
   last_modified datetime(6) not null default now(),
-  primary key(id)
+  primary key(uuid, src)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_520_ci;
 
 -- source and operation for organizations
