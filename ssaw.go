@@ -385,6 +385,12 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	origin := ary[2]
 	mPrintf("origin: %s\n", origin)
+	// FIXME
+	if 1 == 1 {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "SYNC_OK")
+		return
+	}
 	if gAuth0URL == "" {
 		gAuth0URL = os.Getenv("AUTH0_URL")
 	}
@@ -583,7 +589,7 @@ func initSHDB() {
 	if err != nil {
 		fatalf(true, "unable to connect to affiliation database: %v", err)
 	}
-	//d.SetConnMaxLifetime(time.Second)
+	d.SetConnMaxLifetime(10 * time.Second)
 	gDB = d
 	_, err = exec(nil, "set @origin = ?", "sfdc")
 	if err != nil {
