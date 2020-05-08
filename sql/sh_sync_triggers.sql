@@ -15,8 +15,7 @@ drop trigger if exists domains_organizations_after_delete_trigger;
 drop trigger if exists uidentities_before_insert_trigger;
 drop trigger if exists uidentities_before_update_trigger;
 drop trigger if exists uidentities_after_insert_trigger;
--- can only update last_modified column - this doesn't change anything no need to notify
--- drop trigger if exists uidentities_after_update_trigger;
+drop trigger if exists uidentities_after_update_trigger;
 drop trigger if exists uidentities_after_delete_trigger;
 
 drop trigger if exists profiles_before_insert_trigger;
@@ -113,8 +112,12 @@ create trigger uidentities_after_insert_trigger after insert on uidentities
 for each row begin
   insert into sync_uuids(uuid, src, op) values(new.uuid, new.src, 'i');
 end$
--- there is no after_update trigger:
--- can only update last_modified column - this doesn't change anything no need to notify
+create trigger uidentities_after_update_trigger after update on uidentities
+for each row begin
+  if not(old.last_modified <=> new.last_modified) then
+    insert into sync_uuids(uuid, src, op) values(new.uuid, new.src, 'u');
+  end if;
+end$
 create trigger uidentities_after_delete_trigger after delete on uidentities
 for each row begin
   insert into sync_uuids(uuid, src, op) values(old.uuid, old.src, 'd');
@@ -133,6 +136,7 @@ for each row begin
 end$
 create trigger profiles_after_insert_trigger after insert on profiles
 for each row begin
+  -- consider 'u' here because primary table is uidentities
   insert into sync_uuids(uuid, src, op) values(new.uuid, new.src, 'i');
 end$
 create trigger profiles_after_update_trigger after update on profiles
