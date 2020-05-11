@@ -53,6 +53,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
               key: SH_DB_ENDPOINT.secret
+        - name: GITDM_SYNC_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: GITDM_SYNC_URL.secret
         - name: ORG_SVC_URL
           valueFrom:
             secretKeyRef:

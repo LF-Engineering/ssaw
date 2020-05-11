@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LF-Engineering/ssaw/ssawsync"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -45,6 +46,7 @@ var (
 	gLFAuth            string
 	gUserAPIURL        string
 	gOrgAPIURL         string
+	gGitdmURL          string
 )
 
 func mPrintf(format string, args ...interface{}) (n int, err error) {
@@ -361,6 +363,7 @@ func processTopic(region, key, secret, topic string) {
 	}
 }
 
+// This is called from: ssawsync/sync.go (ssawsync.Sync)
 func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	gw = w
 	info := requestInfo(req)
@@ -385,6 +388,20 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	}
 	origin := ary[2]
 	mPrintf("origin: %s\n", origin)
+	if gGitdmURL == "" {
+		gGitdmURL = os.Getenv("GITDM_SYNC_URL")
+	}
+	switch origin {
+	case "json2hat", "bitergia-import-sh-json", "bitergia-import-map-file", "sds-final":
+		e := ssawsync.SyncGitdm(gGitdmURL, origin)
+		if e != nil {
+			mPrintf("gitdm sync error for %s origin: %v\n", origin, e)
+		}
+	case "da-affiliation-api", "gitdm", "sds-partial":
+		mPrintf("Not calling gitdm sync for origin %s\n", origin)
+	default:
+		mPrintf("unknown origin: %s - not calling gitdm sync\n", origin)
+	}
 	// FIXME
 	if 1 == 1 {
 		w.WriteHeader(http.StatusOK)
@@ -600,6 +617,7 @@ func initSHDB() {
 func checkEnv() {
 	requiredEnv := []string{
 		"SH_DB_ENDPOINT",
+		"GITDM_SYNC_URL",
 		"ORG_SVC_URL",
 		"USER_SVC_URL",
 		"AWS_REGION",

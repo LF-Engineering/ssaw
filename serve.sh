@@ -14,6 +14,10 @@ if [ -z "${SH_DB_ENDPOINT}" ]
 then
   export SH_DB_ENDPOINT=`cat helm/ssaw/secrets/SH_DB_ENDPOINT.$env`
 fi
+if [ -z "${GITDM_SYNC_URL}" ]
+then
+  export GITDM_SYNC_URL=`cat helm/ssaw/secrets/GITDM_SYNC_URL.$env`
+fi
 if [ -z "${ORG_SVC_URL}" ]
 then
   export ORG_SVC_URL=`cat helm/ssaw/secrets/ORG_SVC_URL.$env`
