@@ -369,6 +369,10 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			},
 		},
 	}
+	// FIXME: currently blocked on
+	// {"Message":"service.SendNotification: AuthorizationError: User: arn:aws:iam::395594542180:user/org-service-user is not authorized to perform:
+	// SNS:Publish on resource: arn:aws:sns:us-east-1:336459956222:platform-trigger-affiliation-test
+	// status code: 403, request id: f54f27df-9458-58d4-b516-70e882528e36"}
 	/*
 			ev := &event.Event{
 				ID:      org,
