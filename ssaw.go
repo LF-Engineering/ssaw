@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LF-Engineering/lfx-models/models/event"
+	"github.com/LF-Engineering/ssaw/models/orgs"
 	"github.com/LF-Engineering/ssaw/ssawsync"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -356,12 +358,37 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			ch <- ret
 		}
 	}()
+	orgsData := orgs.Orgs{
+		Orgs: []orgs.Org{
+			Name:         org,
+			LastModified: updatedAt,
+		},
+	}
+	ev := &event.Event{
+		ID:      org,
+		Created: time.Now(),
+		Version: "1.0.0",
+		Type:    "affiliations_orgs",
+		SourceID: &event.Event{
+			Name:        "SH",
+			Description: "affiliations",
+			CLientID:    gAuth0ClientID,
+		},
+		Data: orgsData,
+	}
+	payloadBytes, err := json.Marshal(ev)
+	if err != nil {
+		err = fmt.Errorf("JSON marshall error: %+v for %v\n", err, ev)
+		fatalOnError(err, false)
+		return
+	}
+	data := string(payloadBytes)
+	mPrintf("notification JSON: %s\n", data)
+	payloadBody := bytes.NewReader(payloadBytes)
 	for i := 0; i < 2; i++ {
-		method := http.MethodGet
-		params := url.Values{}
-		params.Add("name", org)
-		surl := fmt.Sprintf("%s/orgs/search?%s", gOrgAPIURL, params.Encode())
-		req, e := http.NewRequest(method, surl, nil)
+		method := http.MethodPost
+		surl := gNotifAPIURL + "/notification"
+		req, e := http.NewRequest(method, surl, payloadBody)
 		if e != nil {
 			err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, surl)
 			fatalOnError(err, false)
@@ -369,6 +396,7 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", gLFAuth)
+		req.Header.Set("cache-control", "no-cache")
 		//mPrintf("request: %+v\n", req)
 		resp, e := http.DefaultClient.Do(req)
 		if e != nil {
