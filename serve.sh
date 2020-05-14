@@ -18,6 +18,10 @@ if [ -z "${GITDM_SYNC_URL}" ]
 then
   export GITDM_SYNC_URL=`cat helm/ssaw/secrets/GITDM_SYNC_URL.$env`
 fi
+if [ -z "${NOTIF_SVC_URL}" ]
+then
+  export NOTIF_SVC_URL=`cat helm/ssaw/secrets/NOTIF_SVC_URL.$env`
+fi
 if [ -z "${ORG_SVC_URL}" ]
 then
   export ORG_SVC_URL=`cat helm/ssaw/secrets/ORG_SVC_URL.$env`
@@ -25,6 +29,10 @@ fi
 if [ -z "${USER_SVC_URL}" ]
 then
   export USER_SVC_URL=`cat helm/ssaw/secrets/USER_SVC_URL.$env`
+fi
+if [ -z "${AFF_API_URL}" ]
+then
+  export AFF_API_URL=`cat helm/ssaw/secrets/AFF_API_URL.$env`
 fi
 if [ -z "${AWS_REGION}" ]
 then
@@ -57,5 +65,9 @@ fi
 if [ -z "${AUTH0_CLIENT_SECRET}" ]
 then
   export AUTH0_CLIENT_SECRET=`cat helm/ssaw/secrets/AUTH0_CLIENT_SECRET.$env`
+fi
+if [ -z "${BEARER_TOKEN}" ]
+then
+  export BEARER_TOKEN=`cat helm/ssaw/secrets/BEARER_TOKEN.$env`
 fi
 ./ssaw

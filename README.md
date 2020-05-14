@@ -35,3 +35,7 @@ To deploy on Kubernetes
 
 - Add your sync URL (for example AWS ELB of ssaw service stored in `helm/ssaw/secrets/SYNC_URL.prod.secret`) in GitHub repository (Settings -> Secrets -> New secret: `SYNC_URL`).
 - Configre actions in `.github/workflows/`, for example: `.github/workflows/sync.yaml`.
+
+# SNS topic
+
+- If running for the firs time - create a topic: `AWS_PROFILE=... aws sns create-topic --name platform-trigger-affiliation-test`.

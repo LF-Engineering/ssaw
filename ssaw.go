@@ -37,6 +37,7 @@ const (
 
 var (
 	gMtx               *sync.Mutex
+	gTokenMtx          *sync.Mutex
 	gw                 http.ResponseWriter
 	gDB                *sqlx.DB
 	gAuth0URL          string
@@ -46,6 +47,8 @@ var (
 	gLFAuth            string
 	gUserAPIURL        string
 	gOrgAPIURL         string
+	gAffAPIURL         string
+	gNotifAPIURL       string
 	gGitdmURL          string
 )
 
@@ -247,11 +250,100 @@ func getToken() (err error) {
 		return
 	}
 	gLFAuth = "Bearer " + rdata.Token
-	mPrintf("Received new token (length %d)\n", len(gLFAuth))
+	mPrintf("Received new token %s (length %d)\n", gLFAuth, len(gLFAuth))
+	return
+}
+
+/*
+func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op string) (ret [3]string) {
+	var err error
+	defer func() {
+		if recover() != nil {
+			mPrintf("org %s, updated at %v, src %s, op %s, error:\n%s\n", org, updatedAt, src, op, string(debug.Stack()))
+		}
+		if err != nil {
+			ret[2] = err.Error()
+		}
+		if ch != nil {
+			ch <- ret
+		}
+	}()
+	for i := 0; i < 2; i++ {
+		method := http.MethodGet
+		params := url.Values{}
+		params.Add("name", org)
+		surl := fmt.Sprintf("%s/orgs/search?%s", gOrgAPIURL, params.Encode())
+		req, e := http.NewRequest(method, surl, nil)
+		if e != nil {
+			err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, surl)
+			fatalOnError(err, false)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", gLFAuth)
+		//mPrintf("request: %+v\n", req)
+		resp, e := http.DefaultClient.Do(req)
+		if e != nil {
+			err = fmt.Errorf("do request error: %+v for %s url: %s\n", e, method, surl)
+			fatalOnError(err, false)
+			return
+		}
+		if i == 0 && resp.StatusCode == 401 {
+			currToken := gLFAuth
+			_ = resp.Body.Close()
+			mPrintf("Token is invalid, trying to generate another one\n")
+			gTokenMtx.Lock()
+			if currToken == gLFAuth {
+			  mPrintf("Generating new token\n")
+				err = getToken()
+			}
+			gTokenMtx.Unlock()
+			if err != nil {
+				fatalOnError(err, false)
+				return
+			}
+			continue
+		}
+		if resp.StatusCode != 200 {
+			body, e := ioutil.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if e != nil {
+				err = fmt.Errorf("ReadAll non-ok request error: %+v for %s url: %s\n", e, method, surl)
+				fatalOnError(err, false)
+				return
+			}
+			err = fmt.Errorf("Method:%s url:%s status:%d\n%s\n", method, surl, resp.StatusCode, body)
+			fatalOnError(err, false)
+			return
+		}
+		body, e := ioutil.ReadAll(resp.Body)
+		if e != nil {
+			err = e
+			fatalOnError(err, false)
+			return
+		}
+		_ = resp.Body.Close()
+		mPrintf("%s\n", body)
+		ret = [3]string{"org", org, ""}
+		break
+	}
+	return
+}
+*/
+
+func regenerateToken() (err error) {
+	currToken := gLFAuth
+	gTokenMtx.Lock()
+	if currToken == gLFAuth {
+		mPrintf("Generating new token\n")
+		err = getToken()
+	}
+	gTokenMtx.Unlock()
 	return
 }
 
 func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op string) (ret [3]string) {
+	mPrintf("processOrg: %s\n", org)
 	var err error
 	defer func() {
 		if recover() != nil {
@@ -287,7 +379,7 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 		if i == 0 && resp.StatusCode == 401 {
 			_ = resp.Body.Close()
 			mPrintf("Token is invalid, trying to generate another one\n")
-			err = getToken()
+			err = regenerateToken()
 			if err != nil {
 				fatalOnError(err, false)
 				return
@@ -356,15 +448,15 @@ func processTopic(region, key, secret, topic string) {
 			),
 		),
 	)
-	mPrintf("%s: %+v\n", topic, sns)
+	mPrintf("%+v\n", sns)
 	for {
-		// FIXME: subscribe to SNS topic and fetch upadtes from it
+		// FIXME: subscribe to SNS topic and fetch updates from it
 		time.Sleep(10 * time.Second)
 	}
 }
 
 // This is called from: ssawsync/sync.go (ssawsync.Sync)
-func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
+func sendToSNS(w http.ResponseWriter, req *http.Request) {
 	gw = w
 	info := requestInfo(req)
 	mPrintf("Request: %s\n", info)
@@ -402,12 +494,7 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	default:
 		mPrintf("unknown origin: %s - not calling gitdm sync\n", origin)
 	}
-	// FIXME
-	if 1 == 1 {
-		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "SYNC_OK")
-		return
-	}
+	gTokenMtx = &sync.Mutex{}
 	if gAuth0URL == "" {
 		gAuth0URL = os.Getenv("AUTH0_URL")
 	}
@@ -420,12 +507,21 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	if gAuth0Audience == "" {
 		gAuth0Audience = os.Getenv("AUTH0_AUDIENCE")
 	}
+	if gNotifAPIURL == "" {
+		gNotifAPIURL = os.Getenv("NOTIF_SVC_URL")
+	}
 	if gOrgAPIURL == "" {
 		gOrgAPIURL = os.Getenv("ORG_SVC_URL")
 	}
 	if gUserAPIURL == "" {
 		gUserAPIURL = os.Getenv("USER_SVC_URL")
 	}
+	if gAffAPIURL == "" {
+		gAffAPIURL = os.Getenv("AFF_API_URL")
+	}
+	// can be used during development, specify last received token
+	// to avoid getting new token every time app is restarted
+	gLFAuth = os.Getenv("BEARER_TOKEN")
 	if gLFAuth == "" {
 		err = getToken()
 		if fatalOnError(err, false) {
@@ -447,23 +543,22 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		rows      *sql.Rows
 	)
 	// organizations
-	if origin == cAll {
-		rows, err = query(nil, "select name, last_modified, src, op from sync_orgs")
-	} else {
-		rows, err = query(nil, "select name, last_modified, src, op from sync_orgs where src = ?", origin)
-	}
+	// rows, err = query(nil, "select name, last_modified, src, op from sync_orgs where src = ?", origin)
+	// FIXME
+	rows, err = query(nil, "select name, max(last_modified) from sync_orgs group by name order by name limit 4")
 	if fatalOnError(err, false) {
 		return
 	}
 	for rows.Next() {
-		err = rows.Scan(&company, &modified, &src, &op)
+		//err = rows.Scan(&company, &modified, &src, &op)
+		err = rows.Scan(&company, &modified)
 		if fatalOnError(err, false) {
 			return
 		}
 		companies = append(companies, company)
 		modifieds = append(modifieds, modified)
-		srcs = append(srcs, src)
-		ops = append(ops, op)
+		//srcs = append(srcs, src)
+		//ops = append(ops, op)
 	}
 	err = rows.Err()
 	if fatalOnError(err, false) {
@@ -480,7 +575,8 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		ch := make(chan [3]string)
 		nThreads := 0
 		for index := range companies {
-			go processOrg(ch, companies[index], modifieds[index], srcs[index], ops[index])
+			//go processOrg(ch, companies[index], modifieds[index], srcs[index], ops[index])
+			go processOrg(ch, companies[index], modifieds[index], "", "")
 			nThreads++
 			if nThreads == thrN {
 				res := <-ch
@@ -501,7 +597,8 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		for index := range companies {
-			res := processOrg(nil, companies[index], modifieds[index], srcs[index], ops[index])
+			//res := processOrg(nil, companies[index], modifieds[index], srcs[index], ops[index])
+			res := processOrg(nil, companies[index], modifieds[index], "", "")
 			mPrintf("finished %+v\n", res)
 			if res[2] != "" {
 				failedOrgs++
@@ -513,11 +610,9 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	modifieds = []time.Time{}
 	srcs = []string{}
 	ops = []string{}
-	if origin == cAll {
-		rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids")
-	} else {
-		rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids where src = ?", origin)
-	}
+	//rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids where src = ?", origin)
+	// FIXME
+	rows, err = query(nil, "select uuid, last_modified, src, op from sync_uuids limit 1")
 	if fatalOnError(err, false) {
 		return
 	}
@@ -582,7 +677,7 @@ func handleSyncToSFDC(w http.ResponseWriter, req *http.Request) {
 	_, _ = io.WriteString(w, "SYNC_OK")
 }
 
-func handleSyncFromSFDC() {
+func subscribeToSNS() {
 	region := os.Getenv("AWS_REGION")
 	key := os.Getenv("AWS_KEY")
 	secret := os.Getenv("AWS_SECRET")
@@ -618,8 +713,10 @@ func checkEnv() {
 	requiredEnv := []string{
 		"SH_DB_ENDPOINT",
 		"GITDM_SYNC_URL",
+		"NOTIF_SVC_URL",
 		"ORG_SVC_URL",
 		"USER_SVC_URL",
+		"AFF_API_URL",
 		"AWS_REGION",
 		"AWS_KEY",
 		"AWS_SECRET",
@@ -650,8 +747,8 @@ func serve() {
 	}()
 	gMtx = &sync.Mutex{}
 	initSHDB()
-	go handleSyncFromSFDC()
-	http.HandleFunc("/sync/", handleSyncToSFDC)
+	go subscribeToSNS()
+	http.HandleFunc("/sync/", sendToSNS)
 	fatalOnError(http.ListenAndServe("0.0.0.0:6060", nil), true)
 }
 

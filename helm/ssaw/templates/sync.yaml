@@ -58,6 +58,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
               key: GITDM_SYNC_URL.secret
+        - name: NOTIF_SVC_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: NOTIF_SVC_URL.secret
         - name: ORG_SVC_URL
           valueFrom:
             secretKeyRef:
@@ -68,6 +73,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.syncSecret }}
               key: USER_SVC_URL.secret
+        - name: AFF_API_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.syncSecret }}
+              key: AFF_API_URL.secret
         - name: AWS_REGION
           valueFrom:
             secretKeyRef:
