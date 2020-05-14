@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"reflect"
@@ -21,15 +20,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/LF-Engineering/lfx-models/models/event"
-	"github.com/LF-Engineering/ssaw/models/orgs"
+	"github.com/LF-Engineering/ssaw/models/affiliation"
 	"github.com/LF-Engineering/ssaw/ssawsync"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	awsns "github.com/aws/aws-sdk-go/service/sns"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx" //"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 )
 
 const (
@@ -52,6 +51,10 @@ var (
 	gAffAPIURL         string
 	gNotifAPIURL       string
 	gGitdmURL          string
+	gAWSRegion         string
+	gAWSKey            string
+	gAWSSecret         string
+	gAWSSNSTopic       string
 )
 
 func mPrintf(format string, args ...interface{}) (n int, err error) {
@@ -358,36 +361,50 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			ch <- ret
 		}
 	}()
-	orgsData := orgs.Orgs{
-		Orgs: []orgs.Org{
-			Name:         org,
-			LastModified: updatedAt,
+	affData := affiliation.Data{
+		Orgs: []affiliation.Org{
+			{
+				Name:         org,
+				LastModified: updatedAt,
+			},
 		},
 	}
-	ev := &event.Event{
-		ID:      org,
-		Created: time.Now(),
-		Version: "1.0.0",
-		Type:    "affiliations_orgs",
-		SourceID: &event.Event{
-			Name:        "SH",
-			Description: "affiliations",
-			CLientID:    gAuth0ClientID,
-		},
-		Data: orgsData,
-	}
-	payloadBytes, err := json.Marshal(ev)
+	/*
+			ev := &event.Event{
+				ID:      org,
+				Created: strfmt.DateTime(time.Now()),
+				Version: "1.0.0",
+				Type:    "affiliations_orgs",
+				SourceID: &event.Source{
+					Name:        "SH",
+					Description: "affiliations",
+					ClientID:    gAuth0ClientID,
+				},
+				Data: orgsData,
+			}
+			payloadBytes, err := json.Marshal(ev)
+		  payloadBody := bytes.NewReader(payloadBytes)
+	*/
+	jsonBytes, err := json.Marshal(affData)
 	if err != nil {
-		err = fmt.Errorf("JSON marshall error: %+v for %v\n", err, ev)
+		err = fmt.Errorf("JSON marshall error: %+v for %v\n", err, affData)
 		fatalOnError(err, false)
 		return
 	}
-	data := string(payloadBytes)
-	mPrintf("notification JSON: %s\n", data)
+	jsonStr := string(jsonBytes)
+	data := fmt.Sprintf(
+		`{"Id":"%s","Arn":"%s","Source":{"ClientID":"%s","Name":"SH"},"Data":"%s"}`,
+		uuid.New().String(),
+		jsonEscape(gAWSSNSTopic),
+		jsonEscape(gAuth0ClientID),
+		jsonEscape(jsonStr),
+	)
+	mPrintf("Notification JSON: %s\n", data)
+	payloadBytes := []byte(data)
 	payloadBody := bytes.NewReader(payloadBytes)
 	for i := 0; i < 2; i++ {
 		method := http.MethodPost
-		surl := gNotifAPIURL + "/notification"
+		surl := gNotifAPIURL + "/notifications"
 		req, e := http.NewRequest(method, surl, payloadBody)
 		if e != nil {
 			err = fmt.Errorf("new request error: %+v for %s url: %s\n", e, method, surl)
@@ -397,7 +414,7 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", gLFAuth)
 		req.Header.Set("cache-control", "no-cache")
-		//mPrintf("request: %+v\n", req)
+		mPrintf("request: %+v\n", req)
 		resp, e := http.DefaultClient.Do(req)
 		if e != nil {
 			err = fmt.Errorf("do request error: %+v for %s url: %s\n", e, method, surl)
@@ -458,7 +475,7 @@ func processProfile(ch chan [3]string, uuid string, updatedAt time.Time, src, op
 	return
 }
 
-func processTopic(region, key, secret, topic string) {
+func processTopic() {
 	defer func() {
 		if recover() != nil {
 			mPrintf("%s\n", string(debug.Stack()))
@@ -468,15 +485,15 @@ func processTopic(region, key, secret, topic string) {
 		session.Must(
 			session.NewSession(
 				&aws.Config{
-					Region: aws.String(region),
+					Region: aws.String(gAWSRegion),
 					// id, secret, token
-					Credentials: credentials.NewStaticCredentials(key, secret, ""),
+					Credentials: credentials.NewStaticCredentials(gAWSKey, gAWSSecret, ""),
 					MaxRetries:  aws.Int(5),
 				},
 			),
 		),
 	)
-	mPrintf("%+v\n", sns)
+	mPrintf("%+v/%s\n", sns, gAWSSNSTopic)
 	for {
 		// FIXME: subscribe to SNS topic and fetch updates from it
 		time.Sleep(10 * time.Second)
@@ -573,7 +590,7 @@ func sendToSNS(w http.ResponseWriter, req *http.Request) {
 	// organizations
 	// rows, err = query(nil, "select name, last_modified, src, op from sync_orgs where src = ?", origin)
 	// FIXME
-	rows, err = query(nil, "select name, max(last_modified) from sync_orgs group by name order by name limit 4")
+	rows, err = query(nil, "select name, max(last_modified) from sync_orgs group by name order by name limit 1")
 	if fatalOnError(err, false) {
 		return
 	}
@@ -706,12 +723,8 @@ func sendToSNS(w http.ResponseWriter, req *http.Request) {
 }
 
 func subscribeToSNS() {
-	region := os.Getenv("AWS_REGION")
-	key := os.Getenv("AWS_KEY")
-	secret := os.Getenv("AWS_SECRET")
-	topic := os.Getenv("AWS_TOPIC")
 	for {
-		processTopic(region, key, secret, topic)
+		processTopic()
 		mPrintf("process topic finished, restarting\n")
 	}
 }
@@ -735,6 +748,13 @@ func initSHDB() {
 	if err != nil {
 		fatalf(true, "unable to set origin session variable: %v", err)
 	}
+}
+
+func initAWS() {
+	gAWSRegion = os.Getenv("AWS_REGION")
+	gAWSKey = os.Getenv("AWS_KEY")
+	gAWSSecret = os.Getenv("AWS_SECRET")
+	gAWSSNSTopic = os.Getenv("AWS_TOPIC")
 }
 
 func checkEnv() {
@@ -773,8 +793,9 @@ func serve() {
 			os.Exit(1)
 		}
 	}()
-	gMtx = &sync.Mutex{}
+	initAWS()
 	initSHDB()
+	gMtx = &sync.Mutex{}
 	go subscribeToSNS()
 	http.HandleFunc("/sync/", sendToSNS)
 	fatalOnError(http.ListenAndServe("0.0.0.0:6060", nil), true)
