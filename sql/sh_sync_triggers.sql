@@ -57,13 +57,13 @@ end$
 create trigger organizations_after_update_trigger after update on organizations
 for each row begin
   if old.name != new.name then
-    insert into sync_orgs(name, src, op) values(old.name, old.src, 'd');
+    insert into sync_orgs(name, src, op) values(old.name, coalesce(old.src, 'unknown'), 'd');
     insert into sync_orgs(name, src, op) values(new.name, new.src, 'i');
   end if;
 end$
 create trigger organizations_after_delete_trigger after delete on organizations
 for each row begin
-  insert into sync_orgs(name, src, op) values(old.name, old.src, 'd');
+  insert into sync_orgs(name, src, op) values(old.name, coalesce(old.src, 'unknown'), 'd');
 end$
 
 -- domains_organizations table
@@ -120,7 +120,7 @@ for each row begin
 end$
 create trigger uidentities_after_delete_trigger after delete on uidentities
 for each row begin
-  insert into sync_uuids(uuid, src, op) values(old.uuid, old.src, 'd');
+  insert into sync_uuids(uuid, src, op) values(old.uuid, coalesce(old.src, 'unknown'), 'd');
 end$
 
 -- profiles table
@@ -147,7 +147,7 @@ for each row begin
 end$
 create trigger profiles_after_delete_trigger after delete on profiles
 for each row begin
-  insert into sync_uuids(uuid, src, op) values(old.uuid, old.src, 'd');
+  insert into sync_uuids(uuid, src, op) values(old.uuid, coalesce(old.src, 'unknown'), 'd');
 end$
 
 -- identities table
@@ -169,9 +169,9 @@ create trigger identities_after_update_trigger after update on identities
 for each row begin
   if old.source != new.source or not(old.name <=> new.name) or not(old.email <=> new.email) or not(old.username <=> new.username) or not(old.uuid <=> new.uuid) then
     set @origin = coalesce(@origin, 'unknown');
-    insert into sync_uuids(uuid, src, op) values(new.uuid, coalesce(@origin, 'unknown'), 'u');
+    insert into sync_uuids(uuid, src, op) values(new.uuid, @origin, 'u');
     if not(old.uuid <=> new.uuid) then
-      insert into sync_uuids(uuid, src, op) values(old.uuid, coalesce(@origin, 'unknown'), 'u');
+      insert into sync_uuids(uuid, src, op) values(old.uuid, @origin, 'u');
     end if;
   end if;
 end$
@@ -199,9 +199,9 @@ create trigger enrollments_after_update_trigger after update on enrollments
 for each row begin
   if old.uuid != new.uuid or old.organization_id != new.organization_id or old.start != new.start or old.end != new.end then
     set @origin = coalesce(@origin, 'unknown');
-    insert into sync_uuids(uuid, src, op) values(new.uuid, coalesce(@origin, 'unknown'), 'u');
+    insert into sync_uuids(uuid, src, op) values(new.uuid, @origin, 'u');
     if not(old.uuid <=> new.uuid) then
-      insert into sync_uuids(uuid, src, op) values(old.uuid, coalesce(@origin, 'unknown'), 'u');
+      insert into sync_uuids(uuid, src, op) values(old.uuid, @origin, 'u');
     end if;
   end if;
 end$
