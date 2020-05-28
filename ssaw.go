@@ -448,12 +448,12 @@ func processOrg(ch chan [3]string, org string, updatedAt time.Time, src, op stri
 			return
 		}
 		body, e := ioutil.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		if e != nil {
 			err = e
 			fatalOnError(err, false)
 			return
 		}
-		_ = resp.Body.Close()
 		mPrintf("%s\n", body)
 		ret = [3]string{"org", org, ""}
 		break
