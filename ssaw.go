@@ -591,6 +591,10 @@ func sendToSNS(w http.ResponseWriter, req *http.Request) {
 		ops       []string
 		rows      *sql.Rows
 	)
+	// FIXME
+	if 1 == 1 {
+		return
+	}
 	// organizations
 	// rows, err = query(nil, "select name, last_modified, src, op from sync_orgs where src = ?", origin)
 	// FIXME
