@@ -10,6 +10,10 @@ import (
 // Sync - requests sync using SYNC_URL handler passing origin parameter
 // This is supposed to be called from everything that updates SH via ssawsync.Sync(origin)
 func Sync(origin string) (err error) {
+	// FIXME: disable for v2
+	if 1 == 1 {
+		return
+	}
 	if origin == "" {
 		err = fmt.Errorf("origin cannot be empty")
 		return
@@ -57,6 +61,10 @@ func Sync(origin string) (err error) {
 // SyncGitdm - requests sync with gitdm (gitdmURL) with caller arg caller
 // This is supposed to be called from SSAW only for selected origins
 func SyncGitdm(gitdmURL, caller string) (err error) {
+	// FIXME: disable for v2
+	if 1 == 1 {
+		return
+	}
 	if gitdmURL == "" || caller == "" {
 		err = fmt.Errorf("gitdmURL and caller both must be set gitdmURL: %s, caller: %s", gitdmURL, caller)
 		return

@@ -507,6 +507,13 @@ func processTopic() {
 // This is called from: ssawsync/sync.go (ssawsync.Sync)
 func sendToSNS(w http.ResponseWriter, req *http.Request) {
 	gw = w
+	// FIXME: disable for v2: starts
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, "SYNC_OK")
+	if 1 == 1 {
+		return
+	}
+	// FIXME: disable for v2: ends
 	info := requestInfo(req)
 	mPrintf("Request: %s\n", info)
 	var err error
@@ -731,6 +738,10 @@ func sendToSNS(w http.ResponseWriter, req *http.Request) {
 }
 
 func subscribeToSNS() {
+	// FIXME: disable for v2
+	if 1 == 1 {
+		return
+	}
 	for {
 		processTopic()
 		mPrintf("process topic finished, restarting\n")
@@ -791,7 +802,8 @@ func checkEnv() {
 
 func serve() {
 	mPrintf("Starting serve\n")
-	checkEnv()
+	// FIXME: disable for v2
+	//checkEnv()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGUSR1, syscall.SIGALRM)
 	go func() {
@@ -802,7 +814,8 @@ func serve() {
 		}
 	}()
 	initAWS()
-	initSHDB()
+	// FIXME: disable for v2
+	//initSHDB()
 	gMtx = &sync.Mutex{}
 	go subscribeToSNS()
 	http.HandleFunc("/sync/", sendToSNS)
